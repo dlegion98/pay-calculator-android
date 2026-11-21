@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@android:id/background" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/widget_bg">
+    <ImageView android:id="@+id/glow" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="centerCrop"/>
+    <LinearLayout android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="horizontal" android:padding="16dp">
+    <LinearLayout android:layout_width="0dp" android:layout_weight="1.2" android:layout_height="match_parent" android:orientation="vertical">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+        <FrameLayout android:layout_width="28dp" android:layout_height="28dp">
+            <ImageView android:id="@+id/h_badge" android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/w_round" android:scaleType="fitXY"/>
+            <ImageView android:id="@+id/h_icon" android:layout_width="match_parent" android:layout_height="match_parent" android:padding="6dp" android:src="@drawable/ic_payments"/>
+        </FrameLayout>
+        <TextView android:id="@+id/h_title" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginLeft="8dp" android:text="Next pay" android:textSize="13sp" android:textStyle="bold" android:textColor="@color/w_text2" android:fontFamily="sans-serif-medium" android:singleLine="true" android:ellipsize="end"/>
+    </LinearLayout>
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"/>
+        <TextView android:id="@+id/amount" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="30sp" android:textColor="@color/w_text" android:textStyle="bold" android:fontFamily="sans-serif-black" android:singleLine="true" android:ellipsize="end" />
+        <TextView android:id="@+id/sub" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="12sp" android:textColor="@color/w_text2"  android:fontFamily="sans-serif" android:singleLine="true" android:ellipsize="end" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent" android:orientation="vertical" android:background="@drawable/w_field" android:padding="12dp" android:layout_marginLeft="12dp">
+        <TextView android:id="@+id/countdown" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="30sp" android:textColor="@color/w_text" android:textStyle="bold" android:fontFamily="sans-serif-black" android:singleLine="true" android:ellipsize="end" />
+        <TextView android:id="@+id/countdown_label" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="12sp" android:textColor="@color/w_text2"  android:fontFamily="sans-serif" android:singleLine="true" android:ellipsize="end" />
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"/>
+        <TextView android:id="@+id/date" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="13sp" android:textColor="@color/w_text" android:textStyle="bold" android:fontFamily="sans-serif-medium" android:singleLine="true" android:ellipsize="end" />
+        <TextView android:id="@+id/latest" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="11.5sp" android:textColor="@color/w_text2"  android:fontFamily="sans-serif" android:singleLine="true" android:ellipsize="end" />
+    </LinearLayout>
+</LinearLayout>
+</FrameLayout>

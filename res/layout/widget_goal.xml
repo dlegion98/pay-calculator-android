@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@android:id/background" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/widget_bg">
+    <ImageView android:id="@+id/glow" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="centerCrop"/>
+    <LinearLayout android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="16dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+        <FrameLayout android:layout_width="28dp" android:layout_height="28dp">
+            <ImageView android:id="@+id/h_badge" android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/w_round" android:scaleType="fitXY"/>
+            <ImageView android:id="@+id/h_icon" android:layout_width="match_parent" android:layout_height="match_parent" android:padding="6dp" android:src="@drawable/ic_flag"/>
+        </FrameLayout>
+        <TextView android:id="@+id/h_title" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginLeft="8dp" android:text="Monthly goal" android:textSize="13sp" android:textStyle="bold" android:textColor="@color/w_text2" android:fontFamily="sans-serif-medium" android:singleLine="true" android:ellipsize="end"/>
+    </LinearLayout>
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="6dp" android:layout_marginBottom="4dp">
+        <ImageView android:id="@+id/ring" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitCenter"/>
+        <TextView android:id="@+id/pct" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:textSize="20sp" android:textColor="@color/w_text" android:textStyle="bold" android:fontFamily="sans-serif-black"/>
+    </FrameLayout>
+    <TextView android:id="@+id/sub" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:textSize="12sp" android:textColor="@color/w_text2" android:singleLine="true" android:ellipsize="end"/>
+</LinearLayout>
+</FrameLayout>

@@ -1,0 +1,9 @@
+<resources>
+    <color name="w_bg">#FF000000</color>
+    <color name="w_bg_top">#FF000000</color>
+    <color name="w_bg_bot">#FF000000</color>
+    <color name="w_rim">#2EFFFFFF</color>
+    <color name="w_text">#FFFFFFFF</color>
+    <color name="w_text2">#FF8E8E93</color>
+    <color name="w_field">#FF1C1C1E</color>
+</resources>

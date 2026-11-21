@@ -1,0 +1,26 @@
+// Optional: open this folder in Android Studio. (The APK in this folder was built with build.sh.)
+plugins { id 'com.android.application' version '8.7.3' }
+
+android {
+    namespace 'com.dayoadekoya.paycalculator'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.dayoadekoya.paycalculator'
+        minSdk 28
+        targetSdk 35
+        versionCode 60
+        versionName '6.0'
+    }
+    sourceSets {
+        main {
+            manifest.srcFile 'gradle-manifest/AndroidManifest.xml'
+            java.srcDirs = ['src']
+            res.srcDirs = ['res']
+            assets.srcDirs = ['assets']
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}

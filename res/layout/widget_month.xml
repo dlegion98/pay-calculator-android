@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@android:id/background" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@drawable/widget_bg">
+    <ImageView android:id="@+id/glow" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="centerCrop"/>
+    <LinearLayout android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="16dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+        <FrameLayout android:layout_width="28dp" android:layout_height="28dp">
+            <ImageView android:id="@+id/h_badge" android:layout_width="match_parent" android:layout_height="match_parent" android:src="@drawable/w_round" android:scaleType="fitXY"/>
+            <ImageView android:id="@+id/h_icon" android:layout_width="match_parent" android:layout_height="match_parent" android:padding="6dp" android:src="@drawable/ic_calendar_month"/>
+        </FrameLayout>
+        <TextView android:id="@+id/h_title" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:layout_marginLeft="8dp" android:text="This month" android:textSize="13sp" android:textStyle="bold" android:textColor="@color/w_text2" android:fontFamily="sans-serif-medium" android:singleLine="true" android:ellipsize="end"/>
+    </LinearLayout>
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"/>
+    <TextView android:id="@+id/net" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="26sp" android:textColor="@color/w_text" android:textStyle="bold" android:fontFamily="sans-serif-black" android:singleLine="true" android:ellipsize="end" />
+    <TextView android:id="@+id/sub" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="12sp" android:textColor="@color/w_text2"  android:fontFamily="sans-serif" android:singleLine="true" android:ellipsize="end" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="8dp">
+        <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+            <TextView android:id="@+id/hours" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="15sp" android:textColor="@color/w_text" android:textStyle="bold" android:fontFamily="sans-serif-medium" android:singleLine="true" android:ellipsize="end" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Hours" android:textSize="11sp" android:textColor="@color/w_text2" android:singleLine="true"/>
+        </LinearLayout>
+        <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:orientation="vertical">
+            <TextView android:id="@+id/shifts" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textSize="15sp" android:textColor="@color/w_text" android:textStyle="bold" android:fontFamily="sans-serif-medium" android:singleLine="true" android:ellipsize="end" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Shifts" android:textSize="11sp" android:textColor="@color/w_text2" android:singleLine="true"/>
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>
+</FrameLayout>
