@@ -1,27 +1,67 @@
 package com.dayoadekoya.paycalculator;
 
 import android.view.Gravity;
+import android.view.View;
 import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.dayoadekoya.paycalculator.Model.Bill;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
-/** Monthly bills — powers the "safe to spend" card on Home. */
+/**
+ * Subscriptions & bills: every recurring payment, when it's next due, what it costs a month and a
+ * year, free-trial warnings and reminders. Also powers the "safe to spend" card on Home.
+ */
 public class BillsPage extends Page {
-    static final String[] CATS = {"Rent / Mortgage", "Bills", "Phone & Internet", "Transport", "Subscriptions", "Savings", "Debt", "Other"};
-    static final String[] ICONS = {"home", "receipt_long", "sync", "directions_car", "redeem", "savings", "account_balance", "info"};
+    static final String[] CATS = {"Streaming", "Music", "Gaming", "Software & cloud", "News & magazines", "Fitness",
+            "Shopping & memberships", "Rent / Mortgage", "Utilities", "Council tax", "Phone & internet", "Insurance",
+            "Transport", "Loans & credit", "Savings", "Bills", "Subscriptions", "Other"};
+    static final String[] ICONS = {"movie", "music_note", "sports_esports", "cloud", "newspaper", "fitness_center",
+            "shopping_bag", "home", "bolt", "account_balance", "wifi", "shield",
+            "directions_car", "credit_card", "savings", "receipt_long", "subscriptions", "info"};
+    static final String[] FREQS = {"Weekly", "Fortnightly", "Monthly", "Quarterly", "Yearly"};
+    static final String[] REMIND = {"Off", "On the day", "1 day before", "3 days before", "1 week before"};
+    static final int[] REMIND_DAYS = {-1, 0, 1, 3, 7};
 
-    @Override public String title() { return "Bills & budget"; }
-    @Override public String subtitle() { return "See what's safe to spend after your bills"; }
+    /** Popular services: name, category, frequency, subscription? */
+    static final String[][] PRESETS = {
+            {"Netflix", "Streaming", "Monthly", "1"}, {"Disney+", "Streaming", "Monthly", "1"},
+            {"Amazon Prime", "Shopping & memberships", "Monthly", "1"}, {"Spotify", "Music", "Monthly", "1"},
+            {"Apple Music", "Music", "Monthly", "1"}, {"YouTube Premium", "Streaming", "Monthly", "1"},
+            {"Apple TV+", "Streaming", "Monthly", "1"}, {"NOW", "Streaming", "Monthly", "1"},
+            {"iCloud+", "Software & cloud", "Monthly", "1"}, {"Google One", "Software & cloud", "Monthly", "1"},
+            {"Microsoft 365", "Software & cloud", "Yearly", "1"}, {"Xbox Game Pass", "Gaming", "Monthly", "1"},
+            {"PlayStation Plus", "Gaming", "Monthly", "1"}, {"Gym", "Fitness", "Monthly", "1"},
+            {"Rent", "Rent / Mortgage", "Monthly", "0"}, {"Council tax", "Council tax", "Monthly", "0"},
+            {"Energy", "Utilities", "Monthly", "0"}, {"Water", "Utilities", "Monthly", "0"},
+            {"Broadband", "Phone & internet", "Monthly", "0"}, {"Phone contract", "Phone & internet", "Monthly", "0"},
+            {"TV Licence", "Bills", "Yearly", "0"}, {"Car insurance", "Insurance", "Yearly", "0"},
+    };
+
+    private String filter = "All";
+
+    @Override public String title() { return "Subscriptions & bills"; }
+    @Override public String subtitle() { return "Every recurring payment in one place"; }
 
     @Override protected void actions() {
-        s.addAction("add", "Add bill", new Runnable() { @Override public void run() { edit(null); } });
+        s.addAction("add", "Add a recurring payment", new Runnable() { @Override public void run() { edit(null); } });
     }
+
+    // ------------------------------------------------------------------ schedule maths
 
     static String icon(String cat) {
         int i = Arrays.asList(CATS).indexOf(cat);
@@ -30,70 +70,116 @@ public class BillsPage extends Page {
 
     static int color(String cat) {
         switch (cat) {
+            case "Streaming": return Theme.red;
+            case "Music": return Theme.pink;
+            case "Gaming": return Theme.green;
+            case "Software & cloud": return Theme.blue;
+            case "News & magazines": return Theme.text2;
+            case "Fitness": return Theme.orange;
+            case "Shopping & memberships": return Theme.yellow;
             case "Rent / Mortgage": return Theme.indigo;
-            case "Savings": return Theme.green;
-            case "Debt": return Theme.red;
+            case "Utilities": return Theme.orange;
+            case "Council tax": return Theme.purple;
+            case "Phone & internet": return Theme.blue;
+            case "Insurance": return Theme.teal;
             case "Transport": return Theme.cyan;
+            case "Loans & credit": return Theme.red;
+            case "Savings": return Theme.green;
             case "Subscriptions": return Theme.pink;
-            case "Phone & Internet": return Theme.blue;
             default: return Theme.orange;
         }
     }
 
+    /** A real payment date the schedule repeats from. */
+    static LocalDate anchor(Bill b) {
+        if (b.startMillis > 0) return TaxEngine.toDate(b.startMillis);
+        LocalDate t = LocalDate.now().withDayOfMonth(1);
+        return t.withDayOfMonth(Math.min(Math.max(1, b.dayOfMonth), t.lengthOfMonth()));
+    }
+
+    /** The k-th payment after the anchor (k may be negative). Month-based schedules keep the anchor's day. */
+    static LocalDate nth(Bill b, LocalDate anchor, long k) {
+        switch (b.frequency) {
+            case "Weekly": return anchor.plusWeeks(k);
+            case "Fortnightly": return anchor.plusWeeks(2 * k);
+            case "Quarterly": return anchor.plusMonths(3 * k);
+            case "Yearly": return anchor.plusYears(k);
+            default: return anchor.plusMonths(k);
+        }
+    }
+
+    private static long approxIndex(Bill b, LocalDate anchor, LocalDate from) {
+        switch (b.frequency) {
+            case "Weekly": return ChronoUnit.WEEKS.between(anchor, from);
+            case "Fortnightly": return ChronoUnit.WEEKS.between(anchor, from) / 2;
+            case "Quarterly": return ChronoUnit.MONTHS.between(anchor, from) / 3;
+            case "Yearly": return ChronoUnit.YEARS.between(anchor, from);
+            default: return ChronoUnit.MONTHS.between(anchor, from);
+        }
+    }
+
+    /** First payment on or after {@code from}. For a free trial, never before the first charge. */
+    public static LocalDate nextDue(Bill b, LocalDate from) {
+        LocalDate a = anchor(b);
+        if (!from.isAfter(a)) return a;
+        long k = Math.max(0, approxIndex(b, a, from) - 1);
+        LocalDate d = nth(b, a, k);
+        int guard = 0;
+        while (d.isBefore(from) && guard++ < 10) d = nth(b, a, ++k);
+        return d;
+    }
+
+    /** Payments falling within [start, end]. */
+    static List<LocalDate> occurrences(Bill b, LocalDate start, LocalDate end) {
+        List<LocalDate> out = new ArrayList<LocalDate>();
+        if (b.paused) return out;
+        LocalDate a = anchor(b);
+        LocalDate d = nextDue(b, start);
+        long k = Math.max(0, approxIndex(b, a, d));
+        while (nth(b, a, k).isBefore(d)) k++;
+        int guard = 0;
+        while (!d.isAfter(end) && guard++ < 60) {
+            out.add(d);
+            d = nth(b, a, ++k);
+        }
+        return out;
+    }
+
+    /** Average cost per month. */
+    public static double monthly(Bill b) {
+        if (b.paused) return 0;
+        switch (b.frequency) {
+            case "Weekly": return b.amount * 52 / 12;
+            case "Fortnightly": return b.amount * 26 / 12;
+            case "Quarterly": return b.amount / 3;
+            case "Yearly": return b.amount / 12;
+            default: return b.amount;
+        }
+    }
+
+    /** Monthly cost of everything active. */
     public static double total() {
         double t = 0;
-        for (Bill b : Store.bills) t += b.amount;
+        for (Bill b : Store.bills) t += monthly(b);
         return t;
     }
 
-    @Override protected void build() {
-        double total = total();
-        Budget bd = Budget.now();
-        int on = Theme.onHero();
-        LinearLayout hero = Ui.v();
-        hero.setBackground(new Glass.Hero(34));
-        hero.setPadding(Ui.dp(22), Ui.dp(22), Ui.dp(22), Ui.dp(20));
-        TextView cap = Ui.text("SAFE TO SPEND THIS MONTH", 12, 700, Theme.withAlpha(on, 0.85f));
-        cap.setLetterSpacing(0.06f);
-        hero.addView(cap);
-        TextView big = Ui.single("", 38, 800, on);
-        big.setText(Glass.bigMoney(bd.safe, on));
-        Ui.autosize(big, 22, 38);
-        hero.addView(big);
-        hero.addView(Ui.text(Ui.money(bd.income, 0) + " take-home · " + Ui.money(total, 0) + " bills", 13, 600, Theme.withAlpha(on, 0.85f)));
-        hero.setLayoutParams(Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 12));
-        add(hero);
+    static String per(Bill b) {
+        switch (b.frequency) {
+            case "Weekly": return "/wk";
+            case "Fortnightly": return "/2wk";
+            case "Quarterly": return "/qtr";
+            case "Yearly": return "/yr";
+            default: return "/mo";
+        }
+    }
 
-        if (Store.bills.isEmpty()) {
-            LinearLayout c = Ui.card();
-            c.setGravity(Gravity.CENTER_HORIZONTAL);
-            c.setPadding(Ui.dp(24), Ui.dp(26), Ui.dp(24), Ui.dp(24));
-            c.addView(Ui.badge("account_balance_wallet", Theme.accent, 60));
-            TextView t = Ui.text("Add your regular bills", 18, 700, Theme.text);
-            t.setPadding(0, Ui.dp(14), 0, Ui.dp(6));
-            c.addView(t);
-            TextView d = Ui.text("Rent, phone, subscriptions, savings… Home will show how much of this month's pay is left after them.", 14.5f, 400, Theme.text2);
-            d.setGravity(Gravity.CENTER);
-            c.addView(d);
-            c.addView(Ui.space(16));
-            c.addView(Ui.primary("Add bill", "add", new Runnable() { @Override public void run() { edit(null); } }), Ui.lp(Ui.MATCH, Ui.WRAP));
-            add(c);
-            return;
-        }
-        add(Ui.sectionTitle("Monthly bills · " + Ui.money(total)));
-        LinearLayout g = Ui.group();
-        int today = LocalDate.now().getDayOfMonth();
-        for (final Bill b : Store.bills) {
-            String due = b.dayOfMonth < today ? "Paid · due the " + ordinal(b.dayOfMonth) : (b.dayOfMonth == today ? "Due today" : "Due the " + ordinal(b.dayOfMonth));
-            TextView v = Ui.row(g, icon(b.category), color(b.category), b.name, due + " · " + b.category, Ui.money(b.amount), false, new Runnable() {
-                @Override public void run() { edit(b); }
-            });
-            if (v != null) v.setTextColor(b.dayOfMonth < today ? Theme.text2 : Theme.text);
-        }
-        add(g);
-        TextView n = Ui.text("Safe to spend = take-home logged this month minus all your monthly bills. It grows as you log more pay.", 13, 400, Theme.text2);
-        n.setPadding(Ui.dp(10), Ui.dp(4), Ui.dp(10), 0);
-        add(n);
+    static String when(LocalDate d) {
+        long days = ChronoUnit.DAYS.between(LocalDate.now(), d);
+        if (days == 0) return "Today";
+        if (days == 1) return "Tomorrow";
+        if (days > 1 && days < 7) return "In " + days + " days";
+        return d.format(DateTimeFormatter.ofPattern(d.getYear() == LocalDate.now().getYear() ? "EEE d MMM" : "d MMM yyyy", Locale.UK));
     }
 
     static String ordinal(int d) {
@@ -101,61 +187,450 @@ public class BillsPage extends Page {
         switch (d % 10) { case 1: return d + "st"; case 2: return d + "nd"; case 3: return d + "rd"; default: return d + "th"; }
     }
 
+    /** Average monthly take-home over the last three months with pay. */
+    static double avgMonthlyIncome() {
+        Map<String, Double> m = new LinkedHashMap<String, Double>();
+        LocalDate cutoff = LocalDate.now().minusMonths(3).withDayOfMonth(1);
+        for (Model.PayEntry e : Store.entries) {
+            LocalDate d = TaxEngine.toDate(e.dateMillis);
+            if (d.isBefore(cutoff)) continue;
+            String k = d.getYear() + "-" + d.getMonthValue();
+            Double v = m.get(k);
+            m.put(k, (v == null ? 0 : v) + TaxEngine.net(e));
+        }
+        if (m.isEmpty()) return 0;
+        double s = 0;
+        for (double v : m.values()) s += v;
+        return s / m.size();
+    }
+
+    // ------------------------------------------------------------------ page
+
+    private List<Bill> visible() {
+        List<Bill> out = new ArrayList<Bill>();
+        for (Bill b : Store.bills) {
+            if ("Subscriptions".equals(filter) && !b.subscription) continue;
+            if ("Bills".equals(filter) && b.subscription) continue;
+            out.add(b);
+        }
+        final LocalDate t = LocalDate.now();
+        Collections.sort(out, new Comparator<Bill>() {
+            @Override public int compare(Bill x, Bill y) {
+                if (x.paused != y.paused) return x.paused ? 1 : -1;
+                return nextDue(x, t).compareTo(nextDue(y, t));
+            }
+        });
+        return out;
+    }
+
+    @Override protected void build() {
+        if (Store.bills.isEmpty()) { emptyState(); return; }
+        LocalDate today = LocalDate.now();
+        Budget bd = Budget.now();
+        double month = 0, subs = 0;
+        int active = 0;
+        for (Bill b : Store.bills) {
+            if (b.paused) continue;
+            active++;
+            month += monthly(b);
+            if (b.subscription) subs += monthly(b);
+        }
+
+        // Hero: what recurring payments cost
+        int on = Theme.onHero();
+        LinearLayout hero = Ui.v();
+        hero.setBackground(new Glass.Hero(22));
+        hero.setPadding(Ui.dp(22), Ui.dp(22), Ui.dp(22), Ui.dp(20));
+        TextView cap = Ui.text("RECURRING PAYMENTS · PER MONTH", 12, 700, Theme.withAlpha(on, 0.85f));
+        cap.setLetterSpacing(0.06f);
+        hero.addView(cap);
+        TextView big = Ui.single("", 40, 800, on);
+        big.setText(Glass.bigMoney(month, on));
+        Ui.autosize(big, 22, 40);
+        hero.addView(big);
+        hero.addView(Ui.text(Ui.money(month * 12, 0) + " a year · " + active + " active" + (subs > 0 ? " · " + Ui.money(subs, 0) + "/mo on subscriptions" : ""),
+                13, 600, Theme.withAlpha(on, 0.85f)));
+        LinearLayout stats = Ui.h();
+        stats.setPadding(0, Ui.dp(16), 0, 0);
+        stats.addView(heroStat(Ui.money(bd.stillToPay, 0), "Still to pay this month", on), Ui.weight(1));
+        stats.addView(heroStat(Ui.money(bd.safe, 0), "Safe to spend", on), Ui.weight(1));
+        hero.addView(stats);
+        hero.setLayoutParams(Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 14));
+        add(span(hero));
+
+        // Free trials ending soon
+        for (Bill b : Store.bills) {
+            if (!b.trial || b.paused) continue;
+            long days = ChronoUnit.DAYS.between(today, anchor(b));
+            if (days < 0 || days > 7) continue;
+            add(span(trialCard(b, days)));
+        }
+
+        // Share of income
+        double inc = avgMonthlyIncome();
+        if (inc > 0 && month > 0) {
+            LinearLayout c = Ui.card();
+            c.setLayoutParams(Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 14));
+            c.addView(Ui.caption("Share of your take-home"));
+            double pct = month / inc;
+            TextView pv = Ui.text(String.format(Locale.UK, "%.0f%%", pct * 100) + " of a typical month's pay", 18, 750, pct > 0.6 ? Theme.red : Theme.text);
+            pv.setPadding(0, Ui.dp(4), 0, 0);
+            c.addView(pv);
+            Charts.Progress p = new Charts.Progress(a);
+            p.color = pct > 0.6 ? Theme.red : pct > 0.4 ? Theme.orange : Theme.green;
+            p.track = Theme.field;
+            p.set((float) Math.min(1, pct));
+            c.addView(p, Ui.lpm(Ui.MATCH, Ui.dp(8), 0, 10, 0, 8));
+            c.addView(Ui.text("Based on your average take-home of " + Ui.money(inc, 0) + " over the last 3 months." + (subs > 0 ? " Subscriptions alone are " + String.format(Locale.UK, "%.0f%%", subs / inc * 100) + "." : ""), 13, 400, Theme.text2));
+            add(c);
+        }
+
+        // Coming up (next 30 days)
+        List<Object[]> upcoming = new ArrayList<Object[]>();
+        for (Bill b : Store.bills) for (LocalDate d : occurrences(b, today, today.plusDays(30))) upcoming.add(new Object[]{d, b});
+        Collections.sort(upcoming, new Comparator<Object[]>() {
+            @Override public int compare(Object[] x, Object[] y) { return ((LocalDate) x[0]).compareTo((LocalDate) y[0]); }
+        });
+        if (!upcoming.isEmpty()) {
+            double due30 = 0;
+            for (Object[] u : upcoming) due30 += ((Bill) u[1]).amount;
+            add(Ui.sectionTitle("Next 30 days · " + Ui.money(due30, 0)));
+            LinearLayout g = Ui.group();
+            int n = 0;
+            for (Object[] u : upcoming) {
+                if (n++ >= 8) break;
+                if (g.getChildCount() > 0) g.addView(Ui.divider(72));
+                g.addView(upcomingRow((LocalDate) u[0], (Bill) u[1]));
+            }
+            add(follow(g));
+        }
+
+        // By category
+        Map<String, Double> cats = new LinkedHashMap<String, Double>();
+        for (Bill b : Store.bills) {
+            if (b.paused) continue;
+            Double v = cats.get(b.category);
+            cats.put(b.category, (v == null ? 0 : v) + monthly(b));
+        }
+        if (cats.size() >= 2) {
+            List<Map.Entry<String, Double>> list = new ArrayList<Map.Entry<String, Double>>(cats.entrySet());
+            Collections.sort(list, new Comparator<Map.Entry<String, Double>>() {
+                @Override public int compare(Map.Entry<String, Double> x, Map.Entry<String, Double> y) { return Double.compare(y.getValue(), x.getValue()); }
+            });
+            LinearLayout c = Ui.card();
+            c.addView(Ui.caption("Monthly cost by category"));
+            LinearLayout r = Ui.h();
+            r.setPadding(0, Ui.dp(10), 0, 0);
+            FrameLayout f = new FrameLayout(a);
+            Charts.Donut d = new Charts.Donut(a);
+            d.thicknessDp = 16;
+            double[] vals = new double[list.size()];
+            int[] cols = new int[list.size()];
+            for (int i = 0; i < list.size(); i++) { vals[i] = list.get(i).getValue(); cols[i] = color(list.get(i).getKey()); }
+            d.set(vals, cols);
+            f.addView(d, new FrameLayout.LayoutParams(Ui.dp(110), Ui.dp(110), Gravity.CENTER));
+            r.addView(f, new LinearLayout.LayoutParams(Ui.dp(116), Ui.dp(116)));
+            r.addView(Ui.space(14));
+            LinearLayout leg = Ui.v();
+            for (int i = 0; i < Math.min(6, list.size()); i++) {
+                LinearLayout lr = Ui.h();
+                lr.setPadding(0, Ui.dp(3), 0, Ui.dp(3));
+                View dot = new View(a);
+                dot.setBackground(Ui.oval(cols[i]));
+                lr.addView(dot, new LinearLayout.LayoutParams(Ui.dp(9), Ui.dp(9)));
+                lr.addView(Ui.space(8));
+                lr.addView(Ui.single(list.get(i).getKey(), 13.5f, 500, Theme.text), Ui.weight(1));
+                lr.addView(Ui.text(Ui.money(vals[i], 0), 13.5f, 650, Theme.text));
+                leg.addView(lr);
+            }
+            r.addView(leg, Ui.weight(1));
+            c.addView(r);
+            c.setLayoutParams(Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 14, 0, 0));
+            add(c);
+        }
+
+        // All payments
+        add(Ui.sectionTitle("All payments"));
+        LinearLayout seg = Ui.segmented(new String[]{"All", "Subscriptions", "Bills"}, Arrays.asList("All", "Subscriptions", "Bills").indexOf(filter), new Ui.Fn<Integer>() {
+            @Override public void on(Integer i) { filter = new String[]{"All", "Subscriptions", "Bills"}[i]; render(false); }
+        });
+        seg.setLayoutParams(Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 10));
+        add(span(seg));
+        List<Bill> vis = visible();
+        if (vis.isEmpty()) {
+            TextView t = Ui.text("Nothing here yet.", 15, 500, Theme.text2);
+            t.setGravity(Gravity.CENTER);
+            t.setPadding(0, Ui.dp(20), 0, Ui.dp(20));
+            add(span(t));
+        } else {
+            LinearLayout g = Ui.group();
+            for (Bill b : vis) {
+                if (g.getChildCount() > 0) g.addView(Ui.divider(72));
+                g.addView(paymentRow(b));
+            }
+            add(span(g));
+        }
+        TextView n = Ui.text("Tap a payment to edit it, long-press to pause, duplicate or delete. Safe to spend = take-home logged this month minus the payments due this month.", 13, 400, Theme.text2);
+        n.setPadding(Ui.dp(10), Ui.dp(8), Ui.dp(10), 0);
+        add(span(n));
+    }
+
+    private View heroStat(String value, String label, int on) {
+        LinearLayout l = Ui.v();
+        l.addView(Ui.text(value, 17, 750, on));
+        l.addView(Ui.text(label, 12, 500, Theme.withAlpha(on, 0.8f)));
+        return l;
+    }
+
+    private void emptyState() {
+        LinearLayout c = Ui.card();
+        c.setGravity(Gravity.CENTER_HORIZONTAL);
+        c.setPadding(Ui.dp(24), Ui.dp(26), Ui.dp(24), Ui.dp(24));
+        c.addView(Ui.badge("event_repeat", Theme.accent, 60));
+        TextView t = Ui.text("Track your subscriptions and bills", 18, 700, Theme.text);
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(0, Ui.dp(14), 0, Ui.dp(6));
+        c.addView(t);
+        TextView d = Ui.text("Netflix, rent, phone, gym, insurance… See what's due next, what it all costs a month and a year, get reminders before payments, and a heads-up before free trials start charging.", 14.5f, 400, Theme.text2);
+        d.setGravity(Gravity.CENTER);
+        c.addView(d);
+        c.addView(Ui.space(16));
+        c.addView(Ui.primary("Add a payment", "add", new Runnable() { @Override public void run() { edit(null); } }), Ui.lp(Ui.MATCH, Ui.WRAP));
+        add(c);
+    }
+
+    private View trialCard(final Bill b, long days) {
+        LinearLayout c = Ui.card();
+        c.setLayoutParams(Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 14));
+        LinearLayout r = Ui.h();
+        r.addView(Ui.badge("hourglass_top", Theme.orange, 36));
+        r.addView(Ui.space(12));
+        LinearLayout t = Ui.v();
+        t.addView(Ui.text(b.name + " free trial ends " + (days == 0 ? "today" : days == 1 ? "tomorrow" : "in " + days + " days"), 16, 650, Theme.text));
+        t.addView(Ui.text("It then charges " + Ui.money(b.amount) + per(b) + ". Cancel before " + anchor(b).format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.UK)) + " if you don't want to keep it.", 13.5f, 400, Theme.text2));
+        r.addView(t, Ui.weight(1));
+        c.addView(r);
+        Ui.tap(c, 16, new Runnable() { @Override public void run() { edit(b); } });
+        return c;
+    }
+
+    private View upcomingRow(LocalDate d, final Bill b) {
+        LinearLayout r = Ui.h();
+        r.setPadding(Ui.dp(16), Ui.dp(10), Ui.dp(16), Ui.dp(10));
+        r.setMinimumHeight(Ui.dp(56));
+        // calendar-style date tile
+        LinearLayout tile = Ui.v();
+        tile.setGravity(Gravity.CENTER);
+        tile.setBackground(Ui.rr(Theme.withAlpha(color(b.category), Theme.dark ? 0.22f : 0.12f), 10));
+        TextView mo = Ui.text(d.format(DateTimeFormatter.ofPattern("MMM", Locale.UK)).toUpperCase(Locale.UK), 9.5f, 700, color(b.category));
+        tile.addView(mo);
+        tile.addView(Ui.text(String.valueOf(d.getDayOfMonth()), 16, 800, Theme.text));
+        r.addView(tile, new LinearLayout.LayoutParams(Ui.dp(42), Ui.dp(42)));
+        r.addView(Ui.space(14));
+        LinearLayout t = Ui.v();
+        t.addView(Ui.single(b.name, 16.5f, 500, Theme.text));
+        t.addView(Ui.text(when(d) + (b.trial && d.equals(anchor(b)) ? " · first charge after trial" : "") + " · " + b.frequency, 13, 400, Theme.text2));
+        r.addView(t, Ui.weight(1));
+        r.addView(Ui.text(Ui.money(b.amount), 16, 650, Theme.text));
+        r.setContentDescription(b.name + ", " + Ui.money(b.amount) + ", " + when(d));
+        Ui.tap(r, 0, new Runnable() { @Override public void run() { edit(b); } });
+        return r;
+    }
+
+    private View paymentRow(final Bill b) {
+        LinearLayout r = Ui.h();
+        r.setPadding(Ui.dp(16), Ui.dp(10), Ui.dp(14), Ui.dp(10));
+        r.setMinimumHeight(Ui.dp(60));
+        r.addView(Ui.badge(icon(b.category), b.paused ? Theme.text3 : color(b.category), 40));
+        r.addView(Ui.space(14));
+        LinearLayout t = Ui.v();
+        LinearLayout nameRow = Ui.h();
+        nameRow.addView(Ui.single(b.name, 16.5f, 500, b.paused ? Theme.text2 : Theme.text), new LinearLayout.LayoutParams(0, Ui.WRAP, 1f));
+        if (b.trial && !b.paused && !anchor(b).isBefore(LocalDate.now())) nameRow.addView(Ui.chip("hourglass_top", "Trial", Theme.orange));
+        if (b.paused) nameRow.addView(Ui.chip("pause", "Paused", Theme.text2));
+        if (b.remindDays >= 0 && !b.paused) { nameRow.addView(Ui.space(4)); nameRow.addView(Ui.icon("notifications", Theme.text3, 15)); }
+        t.addView(nameRow);
+        String w = when(nextDue(b, LocalDate.now()));
+        String sub = b.paused ? b.category + " · " + b.frequency
+                : (w.matches("Today|Tomorrow|In .*") ? w : "Next " + w) + " · " + b.category;
+        t.addView(Ui.single(sub, 13, 400, Theme.text2));
+        r.addView(t, Ui.weight(1));
+        LinearLayout v = Ui.v();
+        v.setGravity(Gravity.END);
+        v.addView(Ui.text(Ui.money(b.amount), 16, 650, b.paused ? Theme.text2 : Theme.text));
+        TextView pr = Ui.text(b.frequency.toLowerCase(Locale.UK), 12, 500, Theme.text2);
+        v.addView(pr);
+        r.addView(v);
+        r.setContentDescription(b.name + ", " + Ui.money(b.amount) + " " + b.frequency.toLowerCase(Locale.UK) + (b.paused ? ", paused" : ", next " + when(nextDue(b, LocalDate.now()))));
+        Ui.tap(r, 0, new Runnable() { @Override public void run() { edit(b); } });
+        r.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override public boolean onLongClick(View v) { Ui.haptic(v); menu(b); return true; }
+        });
+        return r;
+    }
+
+    private void menu(final Bill b) {
+        final String[] opts = {b.paused ? "Resume" : "Pause", "Duplicate", "Delete"};
+        Sheets.choose(a, b.name, opts, -1, new Ui.Fn<Integer>() {
+            @Override public void on(Integer i) {
+                if (i == 0) { b.paused = !b.paused; Store.changed(); a.snack(b.name + (b.paused ? " paused · not counted in your totals" : " resumed")); render(false); }
+                else if (i == 1) {
+                    Bill c = copy(b);
+                    c.name = b.name + " (copy)";
+                    Store.bills.add(c); Store.changed(); render(false);
+                } else delete(b);
+            }
+        });
+    }
+
+    private static Bill copy(Bill b) {
+        Bill c = new Bill();
+        c.name = b.name; c.amount = b.amount; c.dayOfMonth = b.dayOfMonth; c.category = b.category;
+        c.frequency = b.frequency; c.startMillis = b.startMillis; c.subscription = b.subscription;
+        c.remindDays = b.remindDays; c.paused = b.paused; c.trial = b.trial; c.notes = b.notes;
+        return c;
+    }
+
+    private void delete(final Bill b) {
+        final int idx = Store.bills.indexOf(b);
+        Store.bills.remove(b);
+        Store.changed();
+        render(false);
+        a.snack("Deleted " + b.name, "Undo", new Runnable() {
+            @Override public void run() { Store.bills.add(Math.max(0, Math.min(idx, Store.bills.size())), b); Store.changed(); render(false); }
+        });
+    }
+
+    // ------------------------------------------------------------------ editor
+
     private void edit(final Bill existing) {
-        final Bill b = existing != null ? existing : new Bill();
-        final Sheets.Handle h = Sheets.sheet(a, existing == null ? "Add bill" : "Edit bill", null);
-        final EditText name = Ui.field("Name (e.g. Rent)", b.name, false);
-        h.body.addView(name, Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 8));
-        final EditText amount = Ui.field("Amount per month (" + Store.currency() + ")", b.amount > 0 ? Ui.num(b.amount) : "", true);
-        h.body.addView(amount, Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 8));
-        final EditText day = Ui.field("Day of month it's paid (1–31)", String.valueOf(b.dayOfMonth), true);
-        day.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        h.body.addView(day, Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 10));
-        final String[] cat = {b.category};
+        final Bill b = existing != null ? copy(existing) : new Bill();
+        if (existing == null) { b.frequency = "Monthly"; b.subscription = true; b.category = "Streaming"; b.remindDays = 1; }
+        if (existing != null) b.id = existing.id;
+        final LocalDate[] due = {existing != null ? nextDue(existing, LocalDate.now()) : LocalDate.now().plusDays(1)};
+        final Sheets.Handle h = Sheets.sheet(a, existing == null ? "Add a recurring payment" : "Edit payment", null);
+        final EditText name = Ui.field("Name (e.g. Netflix, Rent)", b.name, false);
+        final EditText amount = Ui.field("Amount each time (" + Store.currency() + ")", b.amount > 0 ? Ui.num(b.amount) : "", true);
         final LinearLayout g = Ui.group();
         g.setBackground(Ui.rr(Theme.dark ? Theme.field : Theme.surface, 12));
         final Runnable[] draw = new Runnable[1];
+
+        // Quick picks for popular services
+        if (existing == null) {
+            h.body.addView(Ui.caption("Popular"), Ui.lpm(Ui.MATCH, Ui.WRAP, 4, 0, 0, 8));
+            HorizontalScrollView hs = new HorizontalScrollView(a);
+            hs.setHorizontalScrollBarEnabled(false);
+            LinearLayout row = Ui.h();
+            for (final String[] p : PRESETS) {
+                View ch = Ui.chip(icon(p[1]), p[0], color(p[1]));
+                Ui.tap(ch, 50, new Runnable() {
+                    @Override public void run() {
+                        name.setText(p[0]);
+                        b.category = p[1]; b.frequency = p[2]; b.subscription = "1".equals(p[3]);
+                        Ui.haptic(name);
+                        draw[0].run();
+                        amount.requestFocus();
+                    }
+                });
+                row.addView(ch, Ui.lpm(Ui.WRAP, Ui.WRAP, 0, 0, 8, 0));
+            }
+            hs.addView(row);
+            h.body.addView(hs, Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 12));
+        }
+        h.body.addView(name, Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 8));
+        h.body.addView(amount, Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 10));
+        final LinearLayout kind = Ui.segmented(new String[]{"Subscription", "Bill"}, b.subscription ? 0 : 1, new Ui.Fn<Integer>() {
+            @Override public void on(Integer i) { b.subscription = i == 0; }
+        });
+        h.body.addView(kind, Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 10));
+
         draw[0] = new Runnable() {
             @Override public void run() {
                 g.removeAllViews();
-                Ui.row(g, icon(cat[0]), color(cat[0]), "Category", null, cat[0], true, new Runnable() {
+                Ui.row(g, "autorenew", Theme.blue, "Repeats", null, b.frequency, true, new Runnable() {
                     @Override public void run() {
-                        Sheets.choose(a, "Category", CATS, Arrays.asList(CATS).indexOf(cat[0]), new Ui.Fn<Integer>() {
-                            @Override public void on(Integer i) { cat[0] = CATS[i]; draw[0].run(); }
+                        Sheets.choose(a, "Repeats", FREQS, Arrays.asList(FREQS).indexOf(b.frequency), new Ui.Fn<Integer>() {
+                            @Override public void on(Integer i) { b.frequency = FREQS[i]; draw[0].run(); }
                         });
                     }
+                });
+                Ui.row(g, "calendar_month", Theme.red, b.trial ? "First charge (trial ends)" : "Next payment", null,
+                        due[0].format(DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.UK)), true, new Runnable() {
+                    @Override public void run() {
+                        Sheets.date(a, due[0], new Ui.Fn<LocalDate>() { @Override public void on(LocalDate d) { due[0] = d; draw[0].run(); } });
+                    }
+                });
+                Ui.row(g, icon(b.category), color(b.category), "Category", null, b.category, true, new Runnable() {
+                    @Override public void run() {
+                        Sheets.choose(a, "Category", CATS, Arrays.asList(CATS).indexOf(b.category), new Ui.Fn<Integer>() {
+                            @Override public void on(Integer i) { b.category = CATS[i]; draw[0].run(); }
+                        });
+                    }
+                });
+                int ri = 0;
+                for (int i = 0; i < REMIND_DAYS.length; i++) if (REMIND_DAYS[i] == b.remindDays) ri = i;
+                final int fri = ri;
+                Ui.row(g, "notifications", Theme.orange, "Remind me", null, REMIND[ri], true, new Runnable() {
+                    @Override public void run() {
+                        Sheets.choose(a, "Remind me", REMIND, fri, new Ui.Fn<Integer>() {
+                            @Override public void on(Integer i) {
+                                b.remindDays = REMIND_DAYS[i];
+                                if (b.remindDays >= 0) a.requestNotificationPermission();
+                                draw[0].run();
+                            }
+                        });
+                    }
+                });
+                Ui.switchRow(g, "hourglass_top", Theme.orange, "Free trial", "Warns you before the first charge", b.trial, new Ui.Fn<Boolean>() {
+                    @Override public void on(Boolean v) { b.trial = v; if (v && b.remindDays < 0) b.remindDays = 3; draw[0].run(); }
+                });
+                Ui.switchRow(g, "pause", Theme.text2, "Paused", "Not counted in totals or reminders", b.paused, new Ui.Fn<Boolean>() {
+                    @Override public void on(Boolean v) { b.paused = v; }
                 });
             }
         };
         draw[0].run();
         h.body.addView(g);
+        final EditText notes = Ui.field("Notes (account, how to cancel…)", b.notes, false);
+        h.body.addView(notes, Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 10, 0, 0));
+
         Sheets.buttons(h, "Save", new Runnable() {
             @Override public void run() {
                 double amt = Ui.parse(amount.getText().toString());
                 if (amt <= 0) { a.snack("Enter an amount"); return; }
-                b.name = name.getText().toString().trim().isEmpty() ? cat[0] : name.getText().toString().trim();
+                String nm = name.getText().toString().trim();
+                b.name = nm.isEmpty() ? b.category : nm;
                 b.amount = amt;
-                b.dayOfMonth = (int) Math.max(1, Math.min(31, Ui.parse(day.getText().toString())));
-                b.category = cat[0];
-                if (existing == null) Store.bills.add(b);
+                b.startMillis = TaxEngine.toMillis(due[0]);
+                b.dayOfMonth = due[0].getDayOfMonth();
+                b.notes = notes.getText().toString().trim();
+                if (existing != null) {
+                    int idx = Store.bills.indexOf(existing);
+                    if (idx >= 0) Store.bills.set(idx, b); else Store.bills.add(b);
+                } else Store.bills.add(b);
                 Store.changed();
+                Ui.confirmHaptic(h.body);
                 h.dismiss();
                 render(false);
+                a.snack((existing == null ? "Added " : "Saved ") + b.name + " · " + Ui.money(monthly(b), 2) + " a month");
             }
         });
         if (existing != null) {
             h.body.addView(Ui.space(8));
-            h.body.addView(Ui.button("Delete bill", "delete", Theme.withAlpha(Theme.red, 0.12f), Theme.red, new Runnable() {
-                @Override public void run() { Store.bills.remove(existing); Store.changed(); h.dismiss(); render(false); }
+            h.body.addView(Ui.button("Delete", "delete", Theme.withAlpha(Theme.red, 0.12f), Theme.red, new Runnable() {
+                @Override public void run() { h.dismiss(); delete(existing); }
             }));
         }
         Sheets.show(h);
     }
 
+    // ------------------------------------------------------------------ budget (Home card)
+
     /** This month's budget snapshot. */
     public static final class Budget {
-        public double income, bills, safe, projected;
+        public double income, bills, safe, projected, stillToPay;
         public Bill nextBill;
+        public LocalDate nextDate;
 
         public static Budget now() {
             Budget b = new Budget();
@@ -166,10 +641,17 @@ public class BillsPage extends Page {
             }
             double frac = t.getDayOfMonth() / (double) t.lengthOfMonth();
             b.projected = frac > 0.15 ? b.income / frac : b.income;
-            b.bills = total();
+            LocalDate first = t.withDayOfMonth(1), last = t.withDayOfMonth(t.lengthOfMonth());
+            for (Bill x : Store.bills) {
+                for (LocalDate d : occurrences(x, first, last)) {
+                    b.bills += x.amount;
+                    if (!d.isBefore(t)) b.stillToPay += x.amount;
+                }
+                if (x.paused) continue;
+                LocalDate n = nextDue(x, t);
+                if (b.nextDate == null || n.isBefore(b.nextDate)) { b.nextDate = n; b.nextBill = x; }
+            }
             b.safe = b.income - b.bills;
-            int today = t.getDayOfMonth();
-            for (Bill x : Store.bills) if (x.dayOfMonth >= today) { b.nextBill = x; break; }
             return b;
         }
     }

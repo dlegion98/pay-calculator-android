@@ -107,11 +107,19 @@ public final class Model {
         public String note = "";
     }
 
+    /** A recurring payment: subscription, bill, rent, loan or savings transfer. */
     public static final class Bill {
         public String id = newId();
         public String name = "";
         public double amount;
-        public int dayOfMonth = 1;
+        public int dayOfMonth = 1;              // legacy (v3.3–6.2): monthly bills only stored this
         public String category = "Bills";
+        public String frequency = "Monthly";   // Weekly, Fortnightly, Monthly, Quarterly, Yearly
+        public long startMillis;               // a payment date the schedule repeats from (0 = use dayOfMonth)
+        public boolean subscription;           // subscription vs. bill
+        public int remindDays = -1;            // -1 off, 0 on the day, n days before
+        public boolean paused;
+        public boolean trial;                  // free trial: first charge on startMillis
+        public String notes = "";
     }
 }

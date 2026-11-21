@@ -206,7 +206,7 @@ public class DashboardPage extends Page {
         h.body.addView(Sheets.optionCard("ios_share", Theme.green, "Export statement", "PDF statement or CSV spreadsheet", new Runnable() {
             @Override public void run() { h.dismiss(); Exporter.chooser(a); }
         }));
-        h.body.addView(Sheets.optionCard("account_balance_wallet", Theme.teal, "Bills & budget", "Monthly bills and safe-to-spend", new Runnable() {
+        h.body.addView(Sheets.optionCard("event_repeat", Theme.teal, "Subscriptions & bills", "Recurring payments, trials and safe-to-spend", new Runnable() {
             @Override public void run() { h.dismiss(); a.push(new BillsPage()); }
         }));
         h.body.addView(Sheets.optionCard("filter_list", Theme.purple, "Filter history", "By job, frequency or estimated vs actual", new Runnable() {
@@ -743,7 +743,7 @@ public class DashboardPage extends Page {
         h.addView(Ui.badge("account_balance_wallet", Theme.accent, 40));
         h.addView(Ui.space(12));
         LinearLayout t = Ui.v();
-        t.addView(Ui.caption("Safe to spend"));
+        t.addView(Ui.caption("Safe to spend · after bills & subscriptions"));
         TextView v = Ui.text(Ui.money(b.safe), 22, 800, b.safe >= 0 ? Theme.text : Theme.red);
         t.addView(v);
         h.addView(t, Ui.weight(1));
@@ -754,8 +754,16 @@ public class DashboardPage extends Page {
         p.track = Theme.field;
         p.set(b.bills > 0 ? (float) Math.min(1, b.income / b.bills) : 1f);
         c.addView(p, Ui.lpm(Ui.MATCH, Ui.dp(8), 0, 14, 0, 8));
-        String next = b.nextBill != null ? " · next: " + b.nextBill.name + " " + Ui.money(b.nextBill.amount, 0) + " on the " + BillsPage.ordinal(b.nextBill.dayOfMonth) : "";
-        c.addView(Ui.text(Ui.money(b.income, 0) + " earned of " + Ui.money(b.bills, 0) + " bills" + next, 13, 500, Theme.text2));
+        c.addView(Ui.text(Ui.money(b.income, 0) + " earned · " + Ui.money(b.bills, 0) + " due this month · " + Ui.money(b.stillToPay, 0) + " still to pay", 13, 500, Theme.text2));
+        if (b.nextBill != null) {
+            LinearLayout nx = Ui.h();
+            nx.setPadding(0, Ui.dp(10), 0, 0);
+            nx.addView(Ui.badge(BillsPage.icon(b.nextBill.category), BillsPage.color(b.nextBill.category), 28));
+            nx.addView(Ui.space(10));
+            nx.addView(Ui.single("Next: " + b.nextBill.name + " · " + BillsPage.when(b.nextDate), 14, 600, Theme.text), Ui.weight(1));
+            nx.addView(Ui.text(Ui.money(b.nextBill.amount), 14, 650, Theme.text));
+            c.addView(nx);
+        }
         Ui.tap(c, 28, new Runnable() { @Override public void run() { a.push(new BillsPage()); } });
         return c;
     }

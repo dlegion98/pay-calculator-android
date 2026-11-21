@@ -27,6 +27,13 @@ and two panes.
   - Tap a month to collapse it.
   - Long lists load in batches.
 
+**Subscriptions & bills**
+- Track any recurring payment: weekly, fortnightly, monthly, quarterly or yearly.
+- Quick-add for popular services, and a split between subscriptions and bills.
+- Upcoming payments for the next 30 days, cost per month and per year, a breakdown by category, and the share
+  of your take-home they use.
+- Free-trial alerts before the first charge, reminder notifications, and the option to pause a payment.
+
 **Adding pay**
 - Day-by-day shifts (overtime, unpaid breaks, travel, bonus) or payslip totals.
 - Pick an existing job to fill in its usual rate, tax code and pension.

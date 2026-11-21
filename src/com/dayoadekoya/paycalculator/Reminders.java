@@ -20,6 +20,8 @@ public class Reminders extends BroadcastReceiver {
     private static final String CHANNEL = "reminders";
     private static final String ACTION_FRIDAY = "com.dayoadekoya.paycalculator.FRIDAY";
     private static final String ACTION_PAYDAY = "com.dayoadekoya.paycalculator.PAYDAY";
+    private static final String ACTION_BILLS = "com.dayoadekoya.paycalculator.BILLS";
+    private static final String BILL_CHANNEL = "bills";
 
     public static void ensureChannel(Context c) {
         try {
@@ -27,7 +29,42 @@ public class Reminders extends BroadcastReceiver {
             NotificationChannel ch = new NotificationChannel(CHANNEL, "Reminders", NotificationManager.IMPORTANCE_DEFAULT);
             ch.setDescription("Shift logging and payday reminders");
             nm.createNotificationChannel(ch);
+            NotificationChannel bc = new NotificationChannel(BILL_CHANNEL, "Subscriptions & bills", NotificationManager.IMPORTANCE_DEFAULT);
+            bc.setDescription("Heads-up before recurring payments and free trials charge");
+            nm.createNotificationChannel(bc);
         } catch (Throwable ignored) {}
+    }
+
+    /** Posts a reminder for every payment whose reminder day is today. */
+    static void notifyBills(Context c) {
+        ensureChannel(c);
+        LocalDate today = LocalDate.now();
+        NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
+        for (Model.Bill b : Store.bills) {
+            if (b.paused || b.remindDays < 0) continue;
+            LocalDate due = BillsPage.nextDue(b, today);
+            long days = java.time.temporal.ChronoUnit.DAYS.between(today, due);
+            if (days != b.remindDays) continue;
+            String whenTxt = days == 0 ? "today" : days == 1 ? "tomorrow" : "in " + days + " days";
+            boolean trialEnd = b.trial && due.equals(BillsPage.anchor(b));
+            String title = trialEnd ? b.name + " free trial ends " + whenTxt : b.name + " · " + Ui.money(b.amount) + " due " + whenTxt;
+            String text = trialEnd ? "You'll be charged " + Ui.money(b.amount) + " " + b.frequency.toLowerCase(java.util.Locale.UK) + " after that. Cancel before then if you don't want to keep it."
+                    : b.frequency + " " + (b.subscription ? "subscription" : "payment") + " · " + b.category + (b.notes.isEmpty() ? "" : "\n" + b.notes);
+            Intent open = new Intent(c, MainActivity.class);
+            open.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            open.putExtra(MainActivity.EXTRA_SHORTCUT, "bills");
+            PendingIntent content = PendingIntent.getActivity(c, 40, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            Notification n = new Notification.Builder(c, BILL_CHANNEL)
+                    .setSmallIcon(R.drawable.ic_event_repeat)
+                    .setContentTitle(title)
+                    .setContentText(text)
+                    .setStyle(new Notification.BigTextStyle().bigText(text))
+                    .setColor(BillsPage.color(b.category))
+                    .setContentIntent(content)
+                    .setAutoCancel(true)
+                    .build();
+            try { nm.notify(1000 + Math.abs(b.id.hashCode() % 50000), n); } catch (Throwable ignored) {}
+        }
     }
 
     private static PendingIntent pi(Context c, String action, int code) {
@@ -42,9 +79,19 @@ public class Reminders extends BroadcastReceiver {
         Context c = ctx.getApplicationContext();
         try {
             AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
-            PendingIntent fri = pi(c, ACTION_FRIDAY, 1), pay = pi(c, ACTION_PAYDAY, 2);
+            PendingIntent fri = pi(c, ACTION_FRIDAY, 1), pay = pi(c, ACTION_PAYDAY, 2), bil = pi(c, ACTION_BILLS, 4);
             am.cancel(fri);
             am.cancel(pay);
+            am.cancel(bil);
+            boolean anyBillReminder = false;
+            for (Model.Bill b : Store.bills) if (!b.paused && b.remindDays >= 0) anyBillReminder = true;
+            if (anyBillReminder) {
+                // Daily check at 9am for payments with a reminder due today
+                LocalDateTime now = LocalDateTime.now();
+                LocalDateTime next = now.toLocalDate().atTime(9, 0);
+                if (!next.isAfter(now)) next = next.plusDays(1);
+                am.setWindow(AlarmManager.RTC_WAKEUP, millis(next), 30 * 60 * 1000L, bil);
+            }
             android.content.SharedPreferences p = Store.prefs(c);
             if (p.getBoolean("enableFridayReminder", false)) {
                 LocalDateTime now = LocalDateTime.now();
@@ -79,6 +126,11 @@ public class Reminders extends BroadcastReceiver {
                 android.widget.Toast.makeText(c, e == null ? "Shift too short to log" :
                         "Logged " + Ui.hours(TaxEngine.totalHours(e)) + " · " + Ui.money(TaxEngine.net(e)) + " take-home", android.widget.Toast.LENGTH_LONG).show();
             } catch (Throwable t) { t.printStackTrace(); }
+            return;
+        }
+        if (ACTION_BILLS.equals(action)) {
+            try { if (!Store.ready()) Store.init(c); notifyBills(c); } catch (Throwable t) { t.printStackTrace(); }
+            reschedule(c);
             return;
         }
         ensureChannel(c);

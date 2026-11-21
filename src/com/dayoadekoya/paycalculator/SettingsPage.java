@@ -15,7 +15,7 @@ import java.util.Locale;
 
 /** One UI style grouped settings — port of iOS SettingsView. */
 public class SettingsPage extends Page {
-    public static final String VERSION = "6.2 (Android)";
+    public static final String VERSION = "6.3 (Android)";
 
     @Override public String title() { return "Settings"; }
 
@@ -211,7 +211,7 @@ public class SettingsPage extends Page {
         Ui.row(tl, "layers", Theme.indigo, "Shift templates", Store.templates.size() + " saved", null, true, new Runnable() {
             @Override public void run() { a.push(new TemplatesPage()); }
         });
-        Ui.row(tl, "account_balance_wallet", Theme.teal, "Bills & budget", Store.bills.isEmpty() ? "See what's safe to spend" : Store.bills.size() + " bills · " + Ui.money(BillsPage.total(), 0) + "/month", null, true, new Runnable() {
+        Ui.row(tl, "event_repeat", Theme.teal, "Subscriptions & bills", Store.bills.isEmpty() ? "Track recurring payments and trials" : Store.bills.size() + " payments · " + Ui.money(BillsPage.total(), 0) + "/month", null, true, new Runnable() {
             @Override public void run() { a.push(new BillsPage()); }
         });
         Ui.row(tl, "timer", Theme.green, Shift.running() ? "Shift timer · running" : "Shift timer", Shift.running() ? "Started " + Shift.clock(Shift.elapsedMs()) + " ago" : "Clock in and out from Home", null, true, new Runnable() {

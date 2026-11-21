@@ -240,6 +240,7 @@ public class MainActivity extends Activity {
                     if ("add".equals(sc)) { showTab(0, false); AddHub.show(MainActivity.this); }
                     else if ("search".equals(sc)) { showTab(0, false); push(new SearchPage()); }
                     else if ("insights".equals(sc)) showTab(2, false);
+                    else if ("bills".equals(sc)) { showTab(0, false); push(new BillsPage()); }
                     else if ("timer".equals(sc)) {
                         showTab(0, false);
                         if (Shift.running()) snack("Shift running · " + Shift.clock(Shift.elapsedMs()) + ". Tap Stop & log on Home when you finish");

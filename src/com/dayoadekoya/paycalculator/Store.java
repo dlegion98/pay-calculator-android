@@ -102,7 +102,7 @@ public final class Store {
             @Override public int compare(ShiftTemplate a, ShiftTemplate b) { return Long.compare(a.createdAt, b.createdAt); }
         });
         Collections.sort(bills, new Comparator<Model.Bill>() {
-            @Override public int compare(Model.Bill a, Model.Bill b) { return Integer.compare(a.dayOfMonth, b.dayOfMonth); }
+            @Override public int compare(Model.Bill a, Model.Bill b) { return BillsPage.nextDue(a, java.time.LocalDate.now()).compareTo(BillsPage.nextDue(b, java.time.LocalDate.now())); }
         });
         Collections.sort(expenses, new Comparator<WorkExpense>() {
             @Override public int compare(WorkExpense a, WorkExpense b) { return Long.compare(b.dateMillis, a.dateMillis); }
@@ -122,14 +122,7 @@ public final class Store {
             JSONArray xs = root.optJSONArray("expenses");
             if (xs != null) for (int i = 0; i < xs.length(); i++) expenses.add(expenseFrom(xs.getJSONObject(i)));
             JSONArray bs = root.optJSONArray("bills");
-            if (bs != null) for (int i = 0; i < bs.length(); i++) {
-                JSONObject o = bs.getJSONObject(i);
-                Model.Bill b = new Model.Bill();
-                b.id = o.optString("id", Model.newId()); b.name = o.optString("name", "Bill");
-                b.amount = o.optDouble("amount", 0); b.dayOfMonth = o.optInt("dayOfMonth", 1);
-                b.category = o.optString("category", "Bills");
-                bills.add(b);
-            }
+            if (bs != null) for (int i = 0; i < bs.length(); i++) bills.add(billFrom(bs.getJSONObject(i)));
             sort();
         } catch (Throwable t) {
             t.printStackTrace();
@@ -151,12 +144,7 @@ public final class Store {
             for (WorkExpense x : expenses) xs.put(expenseJson(x));
             root.put("expenses", xs);
             JSONArray bs = new JSONArray();
-            for (Model.Bill b : bills) {
-                JSONObject o = new JSONObject();
-                o.put("id", b.id); o.put("name", b.name); o.put("amount", b.amount);
-                o.put("dayOfMonth", b.dayOfMonth); o.put("category", b.category);
-                bs.put(o);
-            }
+            for (Model.Bill b : bills) bs.put(billJson(b));
             root.put("bills", bs);
             File tmp = new File(app.getFilesDir(), "vault.json.tmp");
             FileOutputStream out = new FileOutputStream(tmp);
@@ -324,11 +312,42 @@ public final class Store {
     // ------------------------------------------------------------- Backup / transfer
 
     /** Same shape as the iOS "Export Database" file, so it can be imported on iPhone too. */
+    static JSONObject billJson(Model.Bill b) throws Exception {
+        JSONObject o = new JSONObject();
+        o.put("id", b.id); o.put("name", b.name); o.put("amount", b.amount);
+        o.put("dayOfMonth", b.dayOfMonth); o.put("category", b.category);
+        o.put("frequency", b.frequency); o.put("startMillis", b.startMillis);
+        o.put("subscription", b.subscription); o.put("remindDays", b.remindDays);
+        o.put("paused", b.paused); o.put("trial", b.trial); o.put("notes", b.notes);
+        return o;
+    }
+
+    static Model.Bill billFrom(JSONObject o) {
+        Model.Bill b = new Model.Bill();
+        b.id = o.optString("id", Model.newId()); b.name = o.optString("name", "Bill");
+        b.amount = o.optDouble("amount", 0); b.dayOfMonth = o.optInt("dayOfMonth", 1);
+        b.category = o.optString("category", "Bills");
+        if ("Phone & Internet".equals(b.category)) b.category = "Phone & internet";   // pre-6.3 names
+        if ("Debt".equals(b.category)) b.category = "Loans & credit";
+        b.frequency = o.optString("frequency", "Monthly");
+        b.startMillis = o.optLong("startMillis", 0);
+        b.subscription = o.optBoolean("subscription", "Subscriptions".equals(b.category));
+        b.remindDays = o.optInt("remindDays", -1);
+        b.paused = o.optBoolean("paused", false);
+        b.trial = o.optBoolean("trial", false);
+        b.notes = o.optString("notes", "");
+        return b;
+    }
+
     public static String exportSyncJson() throws Exception {
         JSONObject root = new JSONObject();
         JSONArray es = new JSONArray();
         for (PayEntry e : entries) es.put(entryJson(e, true));
         root.put("entries", es);
+        // Android extra: the iOS app ignores keys it doesn't know
+        JSONArray rp = new JSONArray();
+        for (Model.Bill b : bills) rp.put(billJson(b));
+        root.put("recurringPayments", rp);
         root.put("syncCode", "android");
         return root.toString(2);
     }
@@ -363,6 +382,15 @@ public final class Store {
             if (xIds.add(x.id)) expenses.add(x);
         }
         changed();
+        JSONArray rps = root.optJSONArray("recurringPayments");
+        if (rps != null) {
+            Set<String> bIds = new HashSet<String>();
+            for (Model.Bill b : bills) bIds.add(b.id);
+            for (int i = 0; i < rps.length(); i++) {
+                Model.Bill b = billFrom(rps.getJSONObject(i));
+                if (bIds.add(b.id)) bills.add(b);
+            }
+        }
         return added;
     }
 
