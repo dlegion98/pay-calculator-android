@@ -27,7 +27,7 @@ and two panes.
   - Tap a month to collapse it.
   - Long lists load in batches.
 
-**Subscriptions & bills**
+**Subscriptions & bills** (its own tab, Subs)
 - Track any recurring payment: weekly, fortnightly, monthly, quarterly or yearly.
 - Quick-add for popular services, and a split between subscriptions and bills.
 - Upcoming payments for the next 30 days, cost per month and per year, a breakdown by category, and the share

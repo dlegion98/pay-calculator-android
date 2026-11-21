@@ -207,7 +207,7 @@ public class DashboardPage extends Page {
             @Override public void run() { h.dismiss(); Exporter.chooser(a); }
         }));
         h.body.addView(Sheets.optionCard("event_repeat", Theme.teal, "Subscriptions & bills", "Recurring payments, trials and safe-to-spend", new Runnable() {
-            @Override public void run() { h.dismiss(); a.push(new BillsPage()); }
+            @Override public void run() { h.dismiss(); a.showTab(MainActivity.TAB_SUBS, true); }
         }));
         h.body.addView(Sheets.optionCard("filter_list", Theme.purple, "Filter history", "By job, frequency or estimated vs actual", new Runnable() {
             @Override public void run() { h.dismiss(); filterSheet(); }
@@ -372,7 +372,7 @@ public class DashboardPage extends Page {
         if (Store.integer("taxYearBannerDismissed", 0) == startYear) return null;
         return banner("celebration", Theme.purple, "New tax year " + TaxEngine.taxYearLabel(startYear),
                 "Allowances reset on 6 April. Check your tax code on your first payslip.", "Check tax code", new Runnable() {
-                    @Override public void run() { a.showTab(3, true); }
+                    @Override public void run() { a.showTab(MainActivity.TAB_SETTINGS, true); }
                 }, new Runnable() {
                     @Override public void run() { Store.put("taxYearBannerDismissed", startYear); render(true); }
                 });
@@ -764,7 +764,7 @@ public class DashboardPage extends Page {
             nx.addView(Ui.text(Ui.money(b.nextBill.amount), 14, 650, Theme.text));
             c.addView(nx);
         }
-        Ui.tap(c, 28, new Runnable() { @Override public void run() { a.push(new BillsPage()); } });
+        Ui.tap(c, 28, new Runnable() { @Override public void run() { a.showTab(MainActivity.TAB_SUBS, true); } });
         return c;
     }
 

@@ -1,7 +1,7 @@
 {
-  "version": "6.3",
-  "versionCode": 63,
-  "size": 1151076,
-  "notes": "New: Subscriptions & bills tracker. Track weekly, monthly, quarterly or yearly payments, see what's due in the next 30 days, monthly and yearly totals, costs by category, free-trial alerts and reminders before payments. Your existing bills carry over.",
+  "version": "6.4",
+  "versionCode": 64,
+  "size": 1155255,
+  "notes": "Subscriptions now have their own tab (Subs). Smoother tab transitions: pages slide together in the direction you're going, and the highlight pill glides and stretches between tabs. The + button floats above the bar and adds a subscription when you're on the Subs tab.",
   "apk": "https://raw.githubusercontent.com/dlegion98/pay-calculator-android/main/releases/PayCalculator.apk"
 }

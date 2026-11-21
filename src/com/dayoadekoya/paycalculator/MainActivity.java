@@ -48,8 +48,9 @@ public class MainActivity extends Activity {
     private boolean useRail, twoPane;
     private LinearLayout fab;
     private View lockOverlay;
-    private final Page[] tabs = new Page[4];
-    private final View[] tabViews = new View[4];
+    public static final int TAB_HOME = 0, TAB_CALENDAR = 1, TAB_SUBS = 2, TAB_INSIGHTS = 3, TAB_SETTINGS = 4, TAB_COUNT = 5;
+    private final Page[] tabs = new Page[TAB_COUNT];
+    private final View[] tabViews = new View[TAB_COUNT];
     private final List<Page> stack = new ArrayList<Page>();
     private final List<View> stackViews = new ArrayList<View>();
     private int currentTab = 0;
@@ -61,8 +62,9 @@ public class MainActivity extends Activity {
         @Override public void run() { if (current != null && !current.isFinishing()) current.refreshAll(); }
     };
 
-    private static final String[] TAB_NAMES = {"Home", "Calendar", "Insights", "Settings"};
-    private static final String[] TAB_ICONS = {"home", "calendar_month", "bar_chart", "settings"};
+    private static final String[] TAB_NAMES = {"Home", "Calendar", "Subs", "Insights", "Settings"};
+    private static final String[] TAB_A11Y = {"Home", "Calendar", "Subscriptions and bills", "Insights", "Settings"};
+    private static final String[] TAB_ICONS = {"home", "calendar_month", "event_repeat", "bar_chart", "settings"};
 
     // ------------------------------------------------------------------ lifecycle
 
@@ -172,6 +174,7 @@ public class MainActivity extends Activity {
             case android.view.KeyEvent.KEYCODE_2: popAll(); showTab(1, true); return true;
             case android.view.KeyEvent.KEYCODE_3: popAll(); showTab(2, true); return true;
             case android.view.KeyEvent.KEYCODE_4: popAll(); showTab(3, true); return true;
+            case android.view.KeyEvent.KEYCODE_5: popAll(); showTab(4, true); return true;
         }
         return super.onKeyShortcut(keyCode, event);
     }
@@ -239,8 +242,8 @@ public class MainActivity extends Activity {
                     popAll();
                     if ("add".equals(sc)) { showTab(0, false); AddHub.show(MainActivity.this); }
                     else if ("search".equals(sc)) { showTab(0, false); push(new SearchPage()); }
-                    else if ("insights".equals(sc)) showTab(2, false);
-                    else if ("bills".equals(sc)) { showTab(0, false); push(new BillsPage()); }
+                    else if ("insights".equals(sc)) showTab(TAB_INSIGHTS, false);
+                    else if ("bills".equals(sc)) showTab(TAB_SUBS, false);
                     else if ("timer".equals(sc)) {
                         showTab(0, false);
                         if (Shift.running()) snack("Shift running · " + Shift.clock(Shift.elapsedMs()) + ". Tap Stop & log on Home when you finish");
@@ -362,7 +365,7 @@ public class MainActivity extends Activity {
         super.onResume();
         current = this;
         if (root == null) return; // diagnostic screen
-        MeshSync.onChange = new Runnable() { @Override public void run() { if (tabs[3] != null && currentTab == 3 && stack.isEmpty()) tabs[3].refresh(); } };
+        MeshSync.onChange = new Runnable() { @Override public void run() { if (tabs[TAB_SETTINGS] != null && currentTab == TAB_SETTINGS && stack.isEmpty()) tabs[TAB_SETTINGS].refresh(); } };
         try { MeshSync.start(this); } catch (Throwable t) { t.printStackTrace(); }
         internalNav = false;
         boolean lockOn = Store.bool("requireBiometrics", false);
@@ -475,10 +478,19 @@ public class MainActivity extends Activity {
         np.leftMargin = side + insetLeft;
         np.rightMargin = side + insetRight;
         LinearLayout.LayoutParams bp = (LinearLayout.LayoutParams) navBar.getLayoutParams();
-        if (w >= 600) { np.width = Ui.WRAP; np.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL; bp.width = Ui.dp(420); bp.weight = 0; }
+        if (w >= 600) { np.width = Ui.WRAP; np.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL; bp.width = Ui.dp(460); bp.weight = 0; }
         else { np.width = Ui.MATCH; np.gravity = Gravity.BOTTOM; bp.width = 0; bp.weight = 1; }
         navBar.setLayoutParams(bp);
         dock.setLayoutParams(np);
+        // The add FAB floats just above the bar, at the trailing edge
+        FrameLayout.LayoutParams fp = (FrameLayout.LayoutParams) fab.getLayoutParams();
+        fp.bottomMargin = navInset + Ui.dp(12 + 70 + 14);
+        fp.rightMargin = side + insetRight + Ui.dp(4);
+        fab.setLayoutParams(fp);
+        boolean fabWanted = !useRail && stack.isEmpty() && imeBottom == 0 && currentTab != TAB_SETTINGS;
+        if (!fabWanted) fab.setVisibility(View.GONE);
+        else if (fab.getVisibility() != View.VISIBLE) { fab.setVisibility(View.VISIBLE); fab.setScaleX(1f); fab.setScaleY(1f); }
+        placeLens(false);
         dock.setVisibility(!useRail && stack.isEmpty() && imeBottom == 0 ? View.VISIBLE : View.GONE);
         FrameLayout.LayoutParams rp = (FrameLayout.LayoutParams) rail.getLayoutParams();
         rp.leftMargin = insetLeft + Ui.dp(10);
@@ -491,8 +503,8 @@ public class MainActivity extends Activity {
         }
 
 
-        for (int i = 0; i < 4; i++) {
-            if (tabViews[i] instanceof Scaffold) ((Scaffold) tabViews[i]).extraBottomDp = useRail ? 28 : 104;
+        for (int i = 0; i < TAB_COUNT; i++) {
+            if (tabViews[i] instanceof Scaffold) ((Scaffold) tabViews[i]).extraBottomDp = useRail ? 28 : (i == TAB_SETTINGS ? 104 : 176);
         }
         if (changed) {
             for (Page t : tabs) if (t != null) t.render(false);
@@ -504,7 +516,7 @@ public class MainActivity extends Activity {
         if (root == null) return;
         Ui.init(this);
         applyLayoutMode();
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < TAB_COUNT; i++) {
             if (tabs[i] == null) continue;
             if (tabViews[i] instanceof Scaffold) ((Scaffold) tabViews[i]).applyInsets();
             tabs[i].render(false);
@@ -522,7 +534,8 @@ public class MainActivity extends Activity {
         switch (i) {
             case 0: return new DashboardPage();
             case 1: return new CalendarPage();
-            case 2: return new AnalyticsPage();
+            case 2: return new BillsPage();
+            case 3: return new AnalyticsPage();
             default: return new SettingsPage();
         }
     }
@@ -532,13 +545,20 @@ public class MainActivity extends Activity {
             tabs[i] = makeTab(i);
             tabViews[i] = tabs[i].create(this, true);
             tabHost.addView(tabViews[i], new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
-            if (tabViews[i] instanceof Scaffold) ((Scaffold) tabViews[i]).applyInsets();
+            if (tabViews[i] instanceof Scaffold) {
+                ((Scaffold) tabViews[i]).extraBottomDp = useRail ? 28 : (i == TAB_SETTINGS ? 104 : 176);
+                ((Scaffold) tabViews[i]).applyInsets();
+            }
         } else if (i != currentTab) {
-            tabs[i].render(true);
+            // Refresh quietly: the page slide is the transition, so cards don't re-animate on top of it
+            tabs[i].render(false);
         }
+        // Shared-axis transition (Material You) with One UI's direction-aware slide.
+        // Both pages move together on hardware layers, so it stays smooth even on busy screens.
         boolean motion = animate && i != currentTab && currentTab >= 0 && !Ui.reducedMotion();
         final int dir = i > currentTab ? 1 : -1;
-        for (int j = 0; j < 4; j++) {
+        final int travel = Math.max(Ui.dp(48), (int) (root.getWidth() * 0.14f));
+        for (int j = 0; j < TAB_COUNT; j++) {
             final View tv = tabViews[j];
             if (tv == null) continue;
             tv.animate().cancel();
@@ -546,19 +566,18 @@ public class MainActivity extends Activity {
                 tv.setVisibility(View.VISIBLE);
                 tv.bringToFront();
                 if (motion) {
-                    // Incoming: fade through + scale up + slide from the direction of travel
                     tv.setAlpha(0f);
-                    tv.setScaleX(0.94f); tv.setScaleY(0.94f);
-                    tv.setTranslationX(Ui.dp(40) * dir);
-                    tv.animate().alpha(1f).scaleX(1f).scaleY(1f).translationX(0).setStartDelay(70)
-                            .setDuration(420).setInterpolator(Ui.EMPHASIZED).withEndAction(null).start();
+                    tv.setTranslationX(travel * dir);
+                    tv.setScaleX(1f); tv.setScaleY(1f);
+                    tv.animate().alpha(1f).translationX(0).setStartDelay(30).setDuration(400)
+                            .setInterpolator(Ui.EMPHASIZED).withLayer().withEndAction(null).start();
                 } else {
                     tv.setAlpha(1f); tv.setScaleX(1f); tv.setScaleY(1f); tv.setTranslationX(0);
                 }
             } else if (motion && j == currentTab && tv.getVisibility() == View.VISIBLE) {
-                // Outgoing: quick fade, shrink and drift the other way, then hide
-                tv.animate().alpha(0f).scaleX(0.96f).scaleY(0.96f).translationX(-Ui.dp(24) * dir).setStartDelay(0)
-                        .setDuration(150).setInterpolator(Ui.EMPHASIZED).withEndAction(new Runnable() {
+                tv.animate().alpha(0f).translationX(-travel * 0.45f * dir).setStartDelay(0).setDuration(190)
+                        .setInterpolator(new android.view.animation.AccelerateInterpolator(1.6f)).withLayer()
+                        .withEndAction(new Runnable() {
                             @Override public void run() {
                                 tv.setVisibility(View.GONE);
                                 tv.setAlpha(1f); tv.setScaleX(1f); tv.setScaleY(1f); tv.setTranslationX(0);
@@ -573,6 +592,7 @@ public class MainActivity extends Activity {
         updateNav(animate);
         setFabVisible(true, animate);
         tabs[i].onShown();
+
     }
 
     private void buildRail() {
@@ -591,7 +611,7 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(Ui.dp(56), Ui.dp(56));
         ap.bottomMargin = Ui.dp(18);
         rail.addView(add, ap);
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < TAB_COUNT; i++) {
             LinearLayout item = navItem(i);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(Ui.dp(68), Ui.WRAP);
             lp.bottomMargin = Ui.dp(10);
@@ -610,13 +630,13 @@ public class MainActivity extends Activity {
         FrameLayout pill = new FrameLayout(this);
         ImageView iv = Ui.icon(TAB_ICONS[idx], Theme.text2, 24);
         pill.addView(iv, new FrameLayout.LayoutParams(Ui.dp(24), Ui.dp(24), Gravity.CENTER));
-        item.addView(pill, new LinearLayout.LayoutParams(Ui.dp(60), Ui.dp(32)));
+        item.addView(pill, new LinearLayout.LayoutParams(Ui.dp(56), Ui.dp(32)));
         TextView label = Ui.text(TAB_NAMES[idx], 12, 500, Theme.text2);
         label.setPadding(0, Ui.dp(3), 0, 0);
         label.setSingleLine(true);
         label.setGravity(Gravity.CENTER_HORIZONTAL);
         item.addView(label, new LinearLayout.LayoutParams(Ui.MATCH, Ui.WRAP));
-        item.setContentDescription(TAB_NAMES[idx] + " tab");
+        item.setContentDescription(TAB_A11Y[idx] + " tab");
         Ui.click(item, new Runnable() {
             @Override public void run() {
                 Ui.haptic(nav != null ? nav : root);
@@ -636,7 +656,7 @@ public class MainActivity extends Activity {
                 }
             }
         });
-        item.setContentDescription(TAB_NAMES[idx]);
+        item.setContentDescription(TAB_A11Y[idx]);
         item.setTag("nav" + idx);
         return item;
     }
@@ -650,7 +670,7 @@ public class MainActivity extends Activity {
     }
 
     /** iOS tab bar: translucent material with a hairline top, four tabs and a central add button. */
-    /** Floating navigation bar: frosted capsule with Material You indicator pills, plus a separate add FAB. */
+    /** Floating navigation bar: a frosted capsule whose indicator pill slides between tabs. */
     private void buildNav() {
         dock = Ui.h();
         dock.setGravity(Gravity.CENTER_VERTICAL);
@@ -659,20 +679,78 @@ public class MainActivity extends Activity {
         navBar = new Glass.Frost(this, 35, true);
         navBar.setTarget(root);
         shadow(navBar);
+        // One indicator for the whole bar (Material You pill that moves like One UI 9's)
         navLens = new View(this);
-        navLens.setVisibility(View.GONE);
+        navLens.setBackground(Glass.tinted(Theme.accent, 16));
+        navLens.setVisibility(View.INVISIBLE);
+        navBar.addView(navLens, new FrameLayout.LayoutParams(Ui.dp(56), Ui.dp(32), Gravity.TOP | Gravity.START));
         nav = Ui.h();
         nav.setGravity(Gravity.CENTER_VERTICAL);
         nav.setPadding(Ui.dp(4), 0, Ui.dp(4), 0);
-        for (int i = 0; i < 4; i++) nav.addView(navItem(i), new LinearLayout.LayoutParams(0, Ui.MATCH, 1f));
+        for (int i = 0; i < TAB_COUNT; i++) nav.addView(navItem(i), new LinearLayout.LayoutParams(0, Ui.MATCH, 1f));
         navBar.addView(nav, new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
+        nav.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            @Override public void onLayoutChange(View v, int l, int t, int r, int b, int ol, int ot, int or, int ob) {
+                if (r - l != or - ol || b - t != ob - ot) placeLens(false);
+            }
+        });
         dock.addView(navBar, new LinearLayout.LayoutParams(0, Ui.dp(70), 1f));
-        dock.addView(Ui.space(12));
-        dock.addView(fab, new LinearLayout.LayoutParams(Ui.dp(64), Ui.dp(64)));
         FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(Ui.MATCH, Ui.WRAP, Gravity.BOTTOM);
         p.setMargins(Ui.dp(16), 0, Ui.dp(16), Ui.dp(12));
         root.addView(dock, p);
+        root.addView(fab, new FrameLayout.LayoutParams(Ui.dp(60), Ui.dp(60), Gravity.BOTTOM | Gravity.END));
     }
+
+    private View navItemView(int idx) {
+        if (nav == null) return null;
+        for (int c = 0; c < nav.getChildCount(); c++) if (("nav" + idx).equals(nav.getChildAt(c).getTag())) return nav.getChildAt(c);
+        return null;
+    }
+
+    /** Moves the indicator under the selected tab, stretching as it travels. */
+    private void placeLens(boolean animate) {
+        if (navLens == null || nav == null) return;
+        final View item = navItemView(currentTab);
+        if (item == null) return;
+        if (item.getWidth() == 0) {
+            nav.post(new Runnable() { @Override public void run() { View it = navItemView(currentTab); if (it != null && it.getWidth() > 0) placeLens(false); } });
+            return;
+        }
+        View pill = ((LinearLayout) item).getChildAt(0);
+        float x = nav.getLeft() + item.getLeft() + pill.getLeft();
+        float y = nav.getTop() + item.getTop() + pill.getTop();
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) navLens.getLayoutParams();
+        if (lp.width != pill.getWidth() || lp.height != pill.getHeight()) { lp.width = pill.getWidth(); lp.height = pill.getHeight(); navLens.setLayoutParams(lp); }
+        boolean placed = navLens.getVisibility() == View.VISIBLE;
+        navLens.setVisibility(View.VISIBLE);
+        if (lensAnim != null) lensAnim.cancel();
+        if (animate && placed && !Ui.reducedMotion()) {
+            float dist = Math.abs(x - navLens.getTranslationX());
+            float stretch = 1f + Math.min(0.9f, dist / Ui.dp(160));
+            navLens.setPivotX(pill.getWidth() / 2f);
+            lensAnim = android.animation.ObjectAnimator.ofPropertyValuesHolder(navLens,
+                    android.animation.PropertyValuesHolder.ofFloat(View.TRANSLATION_X, x),
+                    android.animation.PropertyValuesHolder.ofFloat(View.TRANSLATION_Y, y),
+                    android.animation.PropertyValuesHolder.ofKeyframe(View.SCALE_X,
+                            android.animation.Keyframe.ofFloat(0f, 1f),
+                            android.animation.Keyframe.ofFloat(0.4f, stretch),
+                            android.animation.Keyframe.ofFloat(1f, 1f)),
+                    android.animation.PropertyValuesHolder.ofKeyframe(View.SCALE_Y,
+                            android.animation.Keyframe.ofFloat(0f, 1f),
+                            android.animation.Keyframe.ofFloat(0.4f, 0.82f),
+                            android.animation.Keyframe.ofFloat(1f, 1f)));
+            lensAnim.setDuration(480);
+            lensAnim.setInterpolator(Ui.EMPHASIZED);
+            lensAnim.start();
+        } else {
+            navLens.setTranslationX(x);
+            navLens.setTranslationY(y);
+            navLens.setScaleX(1f);
+            navLens.setScaleY(1f);
+        }
+    }
+
+    private android.animation.ObjectAnimator lensAnim;
 
     private static void shadow(View v) {
         if (Theme.dark) { v.setElevation(0); return; }
@@ -682,9 +760,6 @@ public class MainActivity extends Activity {
     }
 
     /** Slides the glass lens under the selected tab. */
-    private void placeLens(boolean animate) {
-        if (navLens != null) navLens.setVisibility(View.GONE);
-    }
 
     private void updateNav(boolean animate) {
         updateNavIn(nav, animate);
@@ -712,10 +787,12 @@ public class MainActivity extends Activity {
             label.setTypeface(Ui.font(sel ? 700 : 500));
             label.setVisibility(inDock && dockCompact ? View.GONE : View.VISIBLE);
             // Material You active indicator: a tonal pill that grows out from the icon
-            pill.setBackground(sel ? (inDock ? Glass.tinted(Theme.accent, 16) : Glass.gloss(Theme.accent, 16)) : null);
+            pill.setBackground(sel && !inDock ? Glass.gloss(Theme.accent, 16) : null);
             if (sel && animate && !Ui.reducedMotion()) {
-                pill.setScaleX(0.35f); pill.setScaleY(0.9f); pill.setAlpha(0.4f);
-                pill.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(520).setInterpolator(Ui.SPRING).start();
+                if (!inDock) {
+                    pill.setScaleX(0.35f); pill.setScaleY(0.9f); pill.setAlpha(0.4f);
+                    pill.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(520).setInterpolator(Ui.SPRING).start();
+                }
                 // One UI-style icon bounce
                 iv.setScaleX(0.75f); iv.setScaleY(0.75f); iv.setTranslationY(Ui.dp(3));
                 iv.animate().scaleX(1f).scaleY(1f).translationY(0).setStartDelay(40).setDuration(560).setInterpolator(Ui.SPRING).start();
@@ -738,7 +815,8 @@ public class MainActivity extends Activity {
         Ui.tap(fab, 22, new Runnable() {
             @Override public void run() {
                 if (!Ui.reducedMotion()) fab.animate().rotation(fab.getRotation() + 90).setDuration(420).setInterpolator(Ui.SPRING).start();
-                AddHub.show(MainActivity.this);
+                if (currentTab == TAB_SUBS && tabs[TAB_SUBS] instanceof BillsPage) ((BillsPage) tabs[TAB_SUBS]).addNew();
+                else AddHub.show(MainActivity.this);
             }
         });
         fab.setContentDescription("Add pay");
@@ -747,13 +825,32 @@ public class MainActivity extends Activity {
     /** iOS tab bars don't minimise; kept for callers. */
     public void setFabExpanded(boolean expanded) {}
 
+    /** The + button shows on every tab except Settings, and scales in/out as tabs change. */
     private void setFabVisible(boolean visible, boolean animate) {
-        if (!visible || useRail) return;
-        fab.setVisibility(View.VISIBLE);
-        if (animate) {
-            fab.setScaleX(0.6f); fab.setScaleY(0.6f);
-            fab.animate().scaleX(1f).scaleY(1f).setDuration(480).setInterpolator(Ui.SPRING).start();
+        visible = visible && !useRail && stack.isEmpty() && currentTab != TAB_SETTINGS;
+        fab.animate().cancel();
+        if (!visible) {
+            if (fab.getVisibility() != View.VISIBLE) return;
+            if (animate && !Ui.reducedMotion()) {
+                fab.animate().scaleX(0f).scaleY(0f).alpha(0f).setDuration(160).setInterpolator(Ui.EMPHASIZED)
+                        .withEndAction(new Runnable() { @Override public void run() { fab.setVisibility(View.GONE); fab.setAlpha(1f); } }).start();
+            } else fab.setVisibility(View.GONE);
+            return;
         }
+        boolean wasHidden = fab.getVisibility() != View.VISIBLE;
+        fab.setVisibility(View.VISIBLE);
+        fab.setContentDescription(currentTab == TAB_SUBS ? "Add subscription or bill" : "Add pay");
+        if (animate && wasHidden && !Ui.reducedMotion()) {
+            fab.setScaleX(0.4f); fab.setScaleY(0.4f); fab.setAlpha(0f);
+            fab.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(420).setInterpolator(Ui.SPRING).start();
+        } else { fab.setScaleX(1f); fab.setScaleY(1f); fab.setAlpha(1f); }
+    }
+
+    /** Opens the subscriptions tab with the add sheet. */
+    public void addSubscription() {
+        popAll();
+        showTab(TAB_SUBS, true);
+        if (tabs[TAB_SUBS] instanceof BillsPage) ((BillsPage) tabs[TAB_SUBS]).addNew();
     }
 
     // ------------------------------------------------------------------ page stack
@@ -770,6 +867,7 @@ public class MainActivity extends Activity {
         v.setAlpha(0f);
         v.animate().translationX(0).alpha(1f).setDuration(420).setInterpolator(Ui.EMPHASIZED).start();
         dock.setVisibility(View.GONE);
+        fab.setVisibility(View.GONE);
         applyLayoutMode();
         if (twoPane && wasEmpty && tabs[currentTab] != null) tabs[currentTab].render(false);
         p.onShown();
@@ -823,7 +921,7 @@ public class MainActivity extends Activity {
     }
 
     public void refreshAll() {
-        for (int i = 0; i < 4; i++) if (tabs[i] != null) tabs[i].refresh();
+        for (int i = 0; i < TAB_COUNT; i++) if (tabs[i] != null) tabs[i].refresh();
         if (!stack.isEmpty()) {
             Page top = stack.get(stack.size() - 1);
             if (!top.hasUnsavedChanges() && !(top instanceof EntryEditorPage) && !(top instanceof SearchPage)) top.refresh();
@@ -856,7 +954,7 @@ public class MainActivity extends Activity {
             bar.addView(a);
         }
         FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(Ui.MATCH, Ui.WRAP, Gravity.BOTTOM);
-        int bottom = navInset + Ui.dp(stack.isEmpty() && !useRail ? 92 : 20);
+        int bottom = navInset + Ui.dp(stack.isEmpty() && !useRail ? (currentTab == TAB_SETTINGS ? 92 : 166) : 20);
         p.setMargins(Ui.dp(20), 0, Ui.dp(20), bottom);
         snackLayer.addView(bar, p);
         bar.setTranslationY(Ui.dp(40));

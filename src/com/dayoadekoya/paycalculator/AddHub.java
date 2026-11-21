@@ -30,7 +30,7 @@ public final class AddHub {
             }));
         }
         h.body.addView(Sheets.optionCard("event_repeat", Theme.teal, "Subscription or bill", "Track a recurring payment, with reminders and trial alerts", new Runnable() {
-            @Override public void run() { h.dismiss(); a.popAll(); a.push(new BillsPage()); }
+            @Override public void run() { h.dismiss(); a.addSubscription(); }
         }));
         h.body.addView(Sheets.optionCard("download", Theme.green, "Import from iPhone", "Open the backup file exported from Pay Calculator on iOS", new Runnable() {
             @Override public void run() { h.dismiss(); a.startImport(); }

@@ -57,6 +57,9 @@ public class BillsPage extends Page {
     @Override public String title() { return "Subscriptions & bills"; }
     @Override public String subtitle() { return "Every recurring payment in one place"; }
 
+    /** Opens the add sheet (used by the floating + button on this tab). */
+    public void addNew() { edit(null); }
+
     @Override protected void actions() {
         s.addAction("add", "Add a recurring payment", new Runnable() { @Override public void run() { edit(null); } });
     }
