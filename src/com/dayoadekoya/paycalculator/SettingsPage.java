@@ -15,7 +15,7 @@ import java.util.Locale;
 
 /** One UI style grouped settings — port of iOS SettingsView. */
 public class SettingsPage extends Page {
-    public static final String VERSION = "6.0 (Android)";
+    public static final String VERSION = "6.1 (Android)";
 
     @Override public String title() { return "Settings"; }
 
@@ -274,6 +274,17 @@ public class SettingsPage extends Page {
         foot.setPadding(Ui.dp(10), 0, Ui.dp(10), Ui.dp(4));
         add(follow(foot));
 
+        // Updates (from the GitHub releases page)
+        add(Ui.sectionTitle("Updates"));
+        LinearLayout up = Ui.group();
+        Ui.row(up, "autorenew", Theme.green, "Check for updates", "You have version " + Updater.currentVersion(a), null, true, new Runnable() {
+            @Override public void run() { Updater.check(a, true); }
+        });
+        Ui.switchRow(up, "history", Theme.blue, "Check automatically", "Looks for a new version when you open the app", Store.bool("autoUpdateCheck", true), new Ui.Fn<Boolean>() {
+            @Override public void on(Boolean v) { Store.put("autoUpdateCheck", v); }
+        });
+        add(up);
+
         // Help
         add(Ui.sectionTitle("Help"));
         LinearLayout h = Ui.group();
@@ -281,7 +292,7 @@ public class SettingsPage extends Page {
         Ui.row(h, "info", Theme.accent, "About", null, "v" + VERSION, true, new Runnable() {
             @Override public void run() {
                 Sheets.info(a, "Pay Calculator", "UK take-home pay for shift workers.\n\nVersion " + VERSION + "\nTax year " + TaxEngine.taxYearLabel(TaxEngine.taxYearStart(LocalDate.now()))
-                        + " · HMRC bands, Class 1 NI, pensions and student loans.\n\nAll data stays on this device. Figures are estimates — always check your payslip.");
+                        + " · HMRC bands, Class 1 NI, pensions and student loans.\n\nYour pay data stays on this device. The app only goes online to sync with your iPhone on Wi-Fi and to check GitHub for updates. Figures are estimates — always check your payslip.");
             }
         });
         Ui.row(h, "delete", Theme.red, "Erase all data", null, null, false, new Runnable() {

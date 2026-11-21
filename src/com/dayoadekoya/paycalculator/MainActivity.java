@@ -156,6 +156,7 @@ public class MainActivity extends Activity {
         handleIntent(getIntent());
         try { Widgets.updateAll(this); } catch (Throwable ignored) {}
         publishShortcuts();
+        handler.postDelayed(new Runnable() { @Override public void run() { if (!isFinishing()) Updater.checkAuto(MainActivity.this); } }, 4000);
     }
 
     // ------------------------------------------------------------------ keyboard (foldables, tablets, Chromebooks)
