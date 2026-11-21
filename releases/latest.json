@@ -1,7 +1,7 @@
 {
-  "version": "6.2",
-  "versionCode": 62,
-  "size": 1129387,
-  "notes": "New floating navigation bar inspired by One UI 9 and Material You: a frosted capsule with a pill that grows behind the selected tab, bouncy icons and a separate add button. Switching tabs now fades and slides in the direction you're going.",
+  "version": "6.3",
+  "versionCode": 63,
+  "size": 1151076,
+  "notes": "New: Subscriptions & bills tracker. Track weekly, monthly, quarterly or yearly payments, see what's due in the next 30 days, monthly and yearly totals, costs by category, free-trial alerts and reminders before payments. Your existing bills carry over.",
   "apk": "https://raw.githubusercontent.com/dlegion98/pay-calculator-android/main/releases/PayCalculator.apk"
 }
