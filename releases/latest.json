@@ -1,0 +1,7 @@
+{
+  "version": "6.1",
+  "versionCode": 61,
+  "size": 1125291,
+  "notes": "New: the app now updates itself from GitHub (Settings \u203a Updates). Also includes everything from 6.0: iOS-style design, AMOLED dark mode, shift timer with Quick Settings tile, privacy mode, swipe-to-delete, allowance and holiday insights, and more.",
+  "apk": "https://raw.githubusercontent.com/dlegion98/pay-calculator-android/main/releases/PayCalculator.apk"
+}

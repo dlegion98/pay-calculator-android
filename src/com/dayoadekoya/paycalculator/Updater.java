@@ -30,6 +30,8 @@ public final class Updater {
     static final String REPO = "dlegion98/pay-calculator-android";
     static final String API = "https://api.github.com/repos/" + REPO + "/releases/latest";
     static final String PAGE = "https://github.com/" + REPO + "/releases/latest";
+    /** Manifest committed next to the APK in the repo's releases/ folder (written by release.sh). */
+    static final String MANIFEST = "https://raw.githubusercontent.com/" + REPO + "/main/releases/latest.json";
     private static final long AUTO_INTERVAL = 12L * 3600000L;
     private static volatile boolean busy;
 
@@ -56,7 +58,50 @@ public final class Updater {
         return 0;
     }
 
+    /** Prefers the repo's releases/latest.json; falls back to GitHub Releases. Returns the newer of the two. */
     static Release fetch() throws Exception {
+        Release a = null, b = null;
+        Exception err = null;
+        try { a = fetchManifest(); } catch (Exception e) { err = e; }
+        try { b = fetchRelease(); } catch (Exception e) { if (a == null && err != null) throw e; }
+        if (a == null) return b;
+        if (b == null || b.apkUrl == null) return a;
+        return compare(b.version, a.version) > 0 ? b : a;
+    }
+
+    private static String get(String url) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(url + (url.contains("?") ? "&" : "?") + "t=" + System.currentTimeMillis() / 60000).openConnection();
+        c.setConnectTimeout(10000);
+        c.setReadTimeout(15000);
+        c.setUseCaches(false);
+        c.setRequestProperty("User-Agent", "PayCalculator-Android");
+        try {
+            int code = c.getResponseCode();
+            if (code == 404) return null;
+            if (code != 200) throw new Exception("HTTP " + code);
+            InputStream in = c.getInputStream();
+            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
+            return bo.toString("UTF-8");
+        } finally { c.disconnect(); }
+    }
+
+    static Release fetchManifest() throws Exception {
+        String body = get(MANIFEST);
+        if (body == null) return null;
+        JSONObject j = new JSONObject(body);
+        Release r = new Release();
+        r.version = j.optString("version", "");
+        r.notes = j.optString("notes", "");
+        r.apkUrl = j.optString("apk", null);
+        r.size = j.optLong("size", 0);
+        r.pageUrl = "https://github.com/" + REPO;
+        return r;
+    }
+
+    static Release fetchRelease() throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(API).openConnection();
         c.setConnectTimeout(10000);
         c.setReadTimeout(15000);

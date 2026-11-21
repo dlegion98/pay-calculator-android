@@ -3,4 +3,5 @@ build/
 *.keystore
 keystore.properties
 *.apk
+!releases/*.apk
 .DS_Store

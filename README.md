@@ -64,6 +64,17 @@ Monthly totals include averages and take-home per hour.
 - JSON backup in the same format as the iOS app.
 - PDF statement and CSV export.
 
+## Download and updates
+- **Download:** [`releases/PayCalculator.apk`](releases/PayCalculator.apk). Open it on your phone to install.
+- **Automatic updates:** from 6.1 the app checks `releases/latest.json` when it opens (at most every 12 hours),
+  or when you tap Settings › Updates › Check for updates. When there's a newer version it downloads the APK,
+  checks it's a newer Pay Calculator build, and installs it once you confirm.
+- **Publishing a new version:**
+  1. Raise `versionCode` and `versionName` in `AndroidManifest.xml`.
+  2. Run `./release.sh "What's new"`. It builds the APK, updates `releases/`, commits and pushes.
+
+  Updates install only if the APK is signed with the same `release.jks`.
+
 ## Tax engine
 `TaxEngine.java` ports the iOS maths:
 - Income-tax bands, with the allowance taper above £100k.
