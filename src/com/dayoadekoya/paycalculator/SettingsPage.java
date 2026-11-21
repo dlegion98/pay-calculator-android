@@ -15,7 +15,7 @@ import java.util.Locale;
 
 /** One UI style grouped settings — port of iOS SettingsView. */
 public class SettingsPage extends Page {
-    public static final String VERSION = "6.4 (Android)";
+    public static final String VERSION = "6.5 (Android)";
 
     @Override public String title() { return "Settings"; }
 
@@ -252,6 +252,7 @@ public class SettingsPage extends Page {
         Ui.switchRow(sr, "payments", Theme.green, "Payday reminder", "Morning of your next payday", Store.bool("enablePaydayReminder", false), new Ui.Fn<Boolean>() {
             @Override public void on(Boolean v) { Store.put("enablePaydayReminder", v); if (v) a.requestNotificationPermission(); Reminders.reschedule(a); }
         });
+        BillsPage.reminderRows(a, sr, new Runnable() { @Override public void run() { render(false); } });
         add(sr);
 
         // Backup

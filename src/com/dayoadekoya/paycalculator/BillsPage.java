@@ -34,8 +34,69 @@ public class BillsPage extends Page {
             "shopping_bag", "home", "bolt", "account_balance", "wifi", "shield",
             "directions_car", "credit_card", "savings", "receipt_long", "subscriptions", "info"};
     static final String[] FREQS = {"Weekly", "Fortnightly", "Monthly", "Quarterly", "Yearly"};
-    static final String[] REMIND = {"Off", "On the day", "1 day before", "3 days before", "1 week before"};
-    static final int[] REMIND_DAYS = {-1, 0, 1, 3, 7};
+    /** Per-payment reminder: -1 follows the default setting, -3 is off, 0+ is days before. */
+    static final int REMIND_DEFAULT = -1, REMIND_OFF = -3;
+    static final String[] LEAD = {"On the day", "1 day before", "2 days before", "3 days before", "1 week before"};
+    static final int[] LEAD_DAYS = {0, 1, 2, 3, 7};
+    static final String[] HOURS = {"7am", "8am", "9am", "10am", "12pm", "6pm", "8pm"};
+    static final int[] HOUR_VALUES = {7, 8, 9, 10, 12, 18, 20};
+
+    static String leadLabel(int days) {
+        for (int i = 0; i < LEAD_DAYS.length; i++) if (LEAD_DAYS[i] == days) return LEAD[i];
+        return days + " days before";
+    }
+
+    static String hourLabel(int h) {
+        for (int i = 0; i < HOUR_VALUES.length; i++) if (HOUR_VALUES[i] == h) return HOURS[i];
+        return h + ":00";
+    }
+
+    public static boolean remindersOn() { return Store.bool("billReminders", false); }
+
+    /** Days before the payment to notify, or -1 for no reminder. */
+    public static int effectiveRemind(Bill b) {
+        if (b.paused || b.remindDays == REMIND_OFF) return -1;
+        if (b.remindDays >= 0) return b.remindDays;
+        return remindersOn() ? Store.integer("billRemindDays", 1) : -1;
+    }
+
+    /** Master switch + lead time + time of day (shown on the Subs tab and in Settings). */
+    static void reminderRows(final MainActivity a, LinearLayout g, final Runnable redraw) {
+        Ui.switchRow(g, "notifications", Theme.orange, "Payment reminders", "Notify me before subscriptions and bills are taken", remindersOn(), new Ui.Fn<Boolean>() {
+            @Override public void on(Boolean v) {
+                Store.put("billReminders", v);
+                if (v) a.requestNotificationPermission();
+                Reminders.reschedule(a);
+                // Today's reminder time already passed? Send anything due today now rather than skipping it
+                if (v && java.time.LocalTime.now().getHour() >= Store.integer("billRemindHour", 9)) {
+                    try { Reminders.notifyBills(a); } catch (Throwable ignored) {}
+                }
+                a.snack(v ? "You'll get a reminder " + leadLabel(Store.integer("billRemindDays", 1)).toLowerCase(Locale.UK) + " each payment, at " + hourLabel(Store.integer("billRemindHour", 9)) : "Payment reminders off");
+                redraw.run();
+            }
+        });
+        if (!remindersOn()) return;
+        final int lead = Store.integer("billRemindDays", 1);
+        Ui.row(g, "event_repeat", Theme.blue, "When", null, leadLabel(lead), true, new Runnable() {
+            @Override public void run() {
+                int sel = 1;
+                for (int i = 0; i < LEAD_DAYS.length; i++) if (LEAD_DAYS[i] == lead) sel = i;
+                Sheets.choose(a, "Remind me", LEAD, sel, new Ui.Fn<Integer>() {
+                    @Override public void on(Integer i) { Store.put("billRemindDays", LEAD_DAYS[i]); Reminders.reschedule(a); redraw.run(); }
+                });
+            }
+        });
+        final int hour = Store.integer("billRemindHour", 9);
+        Ui.row(g, "schedule", Theme.purple, "Time", null, hourLabel(hour), true, new Runnable() {
+            @Override public void run() {
+                int sel = 2;
+                for (int i = 0; i < HOUR_VALUES.length; i++) if (HOUR_VALUES[i] == hour) sel = i;
+                Sheets.choose(a, "Reminder time", HOURS, sel, new Ui.Fn<Integer>() {
+                    @Override public void on(Integer i) { Store.put("billRemindHour", HOUR_VALUES[i]); Reminders.reschedule(a); redraw.run(); }
+                });
+            }
+        });
+    }
 
     /** Popular services: name, category, frequency, subscription? */
     static final String[][] PRESETS = {
@@ -261,6 +322,12 @@ public class BillsPage extends Page {
         hero.setLayoutParams(Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 14));
         add(span(hero));
 
+        // Payment reminders
+        LinearLayout rg = Ui.group();
+        reminderRows(a, rg, new Runnable() { @Override public void run() { render(false); } });
+        rg.setLayoutParams(Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 14));
+        add(rg);
+
         // Free trials ending soon
         for (Bill b : Store.bills) {
             if (!b.trial || b.paused) continue;
@@ -451,7 +518,7 @@ public class BillsPage extends Page {
         nameRow.addView(Ui.single(b.name, 16.5f, 500, b.paused ? Theme.text2 : Theme.text), new LinearLayout.LayoutParams(0, Ui.WRAP, 1f));
         if (b.trial && !b.paused && !anchor(b).isBefore(LocalDate.now())) nameRow.addView(Ui.chip("hourglass_top", "Trial", Theme.orange));
         if (b.paused) nameRow.addView(Ui.chip("pause", "Paused", Theme.text2));
-        if (b.remindDays >= 0 && !b.paused) { nameRow.addView(Ui.space(4)); nameRow.addView(Ui.icon("notifications", Theme.text3, 15)); }
+        if (effectiveRemind(b) >= 0) { nameRow.addView(Ui.space(4)); nameRow.addView(Ui.icon("notifications", Theme.text3, 15)); }
         t.addView(nameRow);
         String w = when(nextDue(b, LocalDate.now()));
         String sub = b.paused ? b.category + " · " + b.frequency
@@ -508,7 +575,7 @@ public class BillsPage extends Page {
 
     private void edit(final Bill existing) {
         final Bill b = existing != null ? copy(existing) : new Bill();
-        if (existing == null) { b.frequency = "Monthly"; b.subscription = true; b.category = "Streaming"; b.remindDays = 1; }
+        if (existing == null) { b.frequency = "Monthly"; b.subscription = true; b.category = "Streaming"; b.remindDays = REMIND_DEFAULT; }
         if (existing != null) b.id = existing.id;
         final LocalDate[] due = {existing != null ? nextDue(existing, LocalDate.now()) : LocalDate.now().plusDays(1)};
         final Sheets.Handle h = Sheets.sheet(a, existing == null ? "Add a recurring payment" : "Edit payment", null);
@@ -570,22 +637,31 @@ public class BillsPage extends Page {
                         });
                     }
                 });
+                // Reminder: follow the default, turn off, or pick a specific lead time
+                final String defLabel = remindersOn() ? "Default (" + leadLabel(Store.integer("billRemindDays", 1)).toLowerCase(Locale.UK) + ")" : "Default (reminders off)";
+                final String[] opts = new String[LEAD.length + 2];
+                final int[] vals = new int[LEAD.length + 2];
+                opts[0] = defLabel; vals[0] = REMIND_DEFAULT;
+                opts[1] = "Off for this payment"; vals[1] = REMIND_OFF;
+                for (int i = 0; i < LEAD.length; i++) { opts[i + 2] = LEAD[i]; vals[i + 2] = LEAD_DAYS[i]; }
                 int ri = 0;
-                for (int i = 0; i < REMIND_DAYS.length; i++) if (REMIND_DAYS[i] == b.remindDays) ri = i;
+                for (int i = 0; i < vals.length; i++) if (vals[i] == b.remindDays) ri = i;
                 final int fri = ri;
-                Ui.row(g, "notifications", Theme.orange, "Remind me", null, REMIND[ri], true, new Runnable() {
+                String shown = b.remindDays == REMIND_DEFAULT ? (remindersOn() ? leadLabel(Store.integer("billRemindDays", 1)) : "Off (default)")
+                        : b.remindDays == REMIND_OFF ? "Off" : leadLabel(b.remindDays);
+                Ui.row(g, "notifications", Theme.orange, "Remind me", null, shown, true, new Runnable() {
                     @Override public void run() {
-                        Sheets.choose(a, "Remind me", REMIND, fri, new Ui.Fn<Integer>() {
+                        Sheets.choose(a, "Remind me", opts, fri, new Ui.Fn<Integer>() {
                             @Override public void on(Integer i) {
-                                b.remindDays = REMIND_DAYS[i];
-                                if (b.remindDays >= 0) a.requestNotificationPermission();
+                                b.remindDays = vals[i];
+                                if (b.remindDays >= 0 || (b.remindDays == REMIND_DEFAULT && remindersOn())) a.requestNotificationPermission();
                                 draw[0].run();
                             }
                         });
                     }
                 });
                 Ui.switchRow(g, "hourglass_top", Theme.orange, "Free trial", "Warns you before the first charge", b.trial, new Ui.Fn<Boolean>() {
-                    @Override public void on(Boolean v) { b.trial = v; if (v && b.remindDays < 0) b.remindDays = 3; draw[0].run(); }
+                    @Override public void on(Boolean v) { b.trial = v; if (v && b.remindDays == REMIND_DEFAULT && !remindersOn()) b.remindDays = 3; draw[0].run(); }
                 });
                 Ui.switchRow(g, "pause", Theme.text2, "Paused", "Not counted in totals or reminders", b.paused, new Ui.Fn<Boolean>() {
                     @Override public void on(Boolean v) { b.paused = v; }

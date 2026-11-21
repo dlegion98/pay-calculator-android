@@ -41,10 +41,11 @@ public class Reminders extends BroadcastReceiver {
         LocalDate today = LocalDate.now();
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         for (Model.Bill b : Store.bills) {
-            if (b.paused || b.remindDays < 0) continue;
+            int lead = BillsPage.effectiveRemind(b);
+            if (lead < 0) continue;
             LocalDate due = BillsPage.nextDue(b, today);
             long days = java.time.temporal.ChronoUnit.DAYS.between(today, due);
-            if (days != b.remindDays) continue;
+            if (days != lead) continue;
             String whenTxt = days == 0 ? "today" : days == 1 ? "tomorrow" : "in " + days + " days";
             boolean trialEnd = b.trial && due.equals(BillsPage.anchor(b));
             String title = trialEnd ? b.name + " free trial ends " + whenTxt : b.name + " · " + Ui.money(b.amount) + " due " + whenTxt;
@@ -84,11 +85,11 @@ public class Reminders extends BroadcastReceiver {
             am.cancel(pay);
             am.cancel(bil);
             boolean anyBillReminder = false;
-            for (Model.Bill b : Store.bills) if (!b.paused && b.remindDays >= 0) anyBillReminder = true;
+            for (Model.Bill b : Store.bills) if (BillsPage.effectiveRemind(b) >= 0) anyBillReminder = true;
             if (anyBillReminder) {
-                // Daily check at 9am for payments with a reminder due today
+                // Daily check at the chosen time for payments with a reminder due today
                 LocalDateTime now = LocalDateTime.now();
-                LocalDateTime next = now.toLocalDate().atTime(9, 0);
+                LocalDateTime next = now.toLocalDate().atTime(Math.max(0, Math.min(23, Store.prefs(c).getInt("billRemindHour", 9))), 0);
                 if (!next.isAfter(now)) next = next.plusDays(1);
                 am.setWindow(AlarmManager.RTC_WAKEUP, millis(next), 30 * 60 * 1000L, bil);
             }

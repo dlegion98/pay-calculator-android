@@ -114,6 +114,17 @@ public class CalendarPage extends Page {
         final Map<LocalDate, Act> act = activity(month);
         Map<LocalDate, Act> prev = activity(month.minusMonths(1));
         Set<LocalDate> paydays = Payday.inMonth(month.getYear(), month.getMonthValue());
+        // Subscription and bill payments falling in this month
+        final Map<LocalDate, List<Model.Bill>> dues = new java.util.HashMap<LocalDate, List<Model.Bill>>();
+        double dueTotal = 0;
+        for (Model.Bill b : Store.bills) {
+            for (LocalDate d : BillsPage.occurrences(b, month.atDay(1), month.atEndOfMonth())) {
+                List<Model.Bill> l = dues.get(d);
+                if (l == null) { l = new java.util.ArrayList<Model.Bill>(); dues.put(d, l); }
+                l.add(b);
+                dueTotal += b.amount;
+            }
+        }
         double maxNet = 1, total = 0, hours = 0, prevTotal = 0;
         LocalDate bestDay = null; double best = 0;
         for (Map.Entry<LocalDate, Act> en : act.entrySet()) {
@@ -131,7 +142,7 @@ public class CalendarPage extends Page {
         head.setPadding(Ui.dp(6), 0, 0, Ui.dp(10));
         LinearLayout ht = Ui.v();
         ht.addView(Ui.text(month.getMonth().getDisplayName(TextStyle.FULL, Locale.UK) + " " + month.getYear(), 21, 700, Theme.text));
-        ht.addView(Ui.text(Ui.money(total) + " earned · " + Ui.hours(hours), 13.5f, 500, Theme.text2));
+        ht.addView(Ui.text(Ui.money(total) + " earned · " + Ui.hours(hours) + (dueTotal > 0 ? " · " + Ui.money(dueTotal, 0) + " going out" : ""), 13.5f, 500, Theme.text2));
         head.addView(ht, Ui.weight(1));
         head.addView(navBtn("chevron_left", -1));
         head.addView(navBtn("chevron_right", 1));
@@ -156,7 +167,7 @@ public class CalendarPage extends Page {
             final LocalDate date = month.atDay(day);
             Act x = act.get(date);
             boolean pay = paydays.contains(date);
-            grid.addView(cell(date, x, maxNet, pay, date.equals(today), date.equals(selected)), cellLp());
+            grid.addView(cell(date, x, maxNet, pay, date.equals(today), date.equals(selected), dues.get(date)), cellLp());
         }
         SwipeFrame swipe = new SwipeFrame(a);
         swipe.onSwipe = new Ui.Fn<Integer>() {
@@ -169,6 +180,13 @@ public class CalendarPage extends Page {
         legend.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
         legend.setPadding(0, Ui.dp(12), Ui.dp(6), 0);
         legend.addView(Ui.text("💸 payday", 12, 600, Theme.text2));
+        if (!dues.isEmpty()) {
+            legend.addView(Ui.space(10));
+            View dd = new View(a);
+            dd.setBackground(Ui.oval(Theme.red));
+            legend.addView(dd, new LinearLayout.LayoutParams(Ui.dp(7), Ui.dp(7)));
+            legend.addView(Ui.text(" payment", 12, 600, Theme.text2));
+        }
         legend.addView(Ui.flex());
         legend.addView(Ui.text("Less ", 12, 600, Theme.text2));
         float[] steps = {0.2f, 0.45f, 0.7f, 1f};
@@ -184,7 +202,7 @@ public class CalendarPage extends Page {
         add(card);
 
         // Selected day
-        if (selected != null && YearMonth.from(selected).equals(month)) add(selectedCard(selected, act.get(selected), paydays.contains(selected)));
+        if (selected != null && YearMonth.from(selected).equals(month)) add(selectedCard(selected, act.get(selected), paydays.contains(selected), dues.get(selected)));
 
         // Summary
         add(Ui.sectionTitle("Month summary"));
@@ -214,7 +232,18 @@ public class CalendarPage extends Page {
         tiles3.addView(Ui.space(10));
         tiles3.addView(tile("trending_up", Theme.pink, "Take-home per hour", hours > 0 ? Ui.money(total / hours) : "—"), Ui.weight(1));
         add(follow(tiles3));
-        TextView hint = Ui.text("Tip: swipe the calendar to change month, and long-press a day to log a shift on it.", 12.5f, 400, Theme.text2);
+        if (dueTotal > 0) {
+            int count = 0;
+            for (List<Model.Bill> l : dues.values()) count += l.size();
+            LinearLayout tiles4 = Ui.h();
+            tiles4.setPadding(0, Ui.dp(10), 0, 0);
+            tiles4.addView(tile("event_repeat", Theme.red, "Subscriptions & bills", Ui.money(dueTotal, 0)), Ui.weight(1));
+            tiles4.addView(Ui.space(10));
+            tiles4.addView(tile("account_balance_wallet", Theme.green, "Left after payments", Ui.money(total - dueTotal, 0)), Ui.weight(1));
+            tiles4.setContentDescription(count + " payments this month");
+            add(follow(tiles4));
+        }
+        TextView hint = Ui.text("Tip: swipe the calendar to change month, long-press a day to log a shift, and tap a day with coloured dots to see the payments due.", 12.5f, 400, Theme.text2);
         hint.setPadding(Ui.dp(6), Ui.dp(10), Ui.dp(6), 0);
         add(follow(hint));
         if (prevTotal > 0) {
@@ -261,7 +290,7 @@ public class CalendarPage extends Page {
         v.animate().translationX(0).alpha(1).setDuration(420).setInterpolator(Ui.SPRING).start();
     }
 
-    private View cell(final LocalDate date, Act x, double maxNet, boolean payday, boolean today, boolean sel) {
+    private View cell(final LocalDate date, Act x, double maxNet, boolean payday, boolean today, boolean sel, List<Model.Bill> due) {
         FrameLayout f = new FrameLayout(a);
         int bg;
         int fg = Theme.text;
@@ -284,8 +313,25 @@ public class CalendarPage extends Page {
             lp.setMargins(0, Ui.dp(1), Ui.dp(3), 0);
             f.addView(p, lp);
         }
+        // Payment dots along the bottom, one per payment in its category colour (max 3)
+        if (due != null && !due.isEmpty()) {
+            LinearLayout dots = Ui.h();
+            dots.setGravity(Gravity.CENTER);
+            for (int i = 0; i < Math.min(3, due.size()); i++) {
+                View d = new View(a);
+                GradientDrawableHolder.dot(d, BillsPage.color(due.get(i).category), x != null && x.net > 0);
+                LinearLayout.LayoutParams dl = new LinearLayout.LayoutParams(Ui.dp(5), Ui.dp(5));
+                dl.setMargins(Ui.dp(1), 0, Ui.dp(1), 0);
+                dots.addView(d, dl);
+            }
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(Ui.WRAP, Ui.WRAP, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            lp.bottomMargin = Ui.dp(4);
+            f.addView(dots, lp);
+        }
+        StringBuilder dueTxt = new StringBuilder();
+        if (due != null) for (Model.Bill b : due) dueTxt.append(dueTxt.length() == 0 ? ", payments due: " : ", ").append(b.name).append(" ").append(Ui.money(b.amount));
         f.setContentDescription(date.format(java.time.format.DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.UK))
-                + (x != null ? ", earned " + Ui.money(x.net) + ", " + Ui.hours(x.hours) : ", nothing logged") + (payday ? ", payday" : "") + (today ? ", today" : ""));
+                + (x != null ? ", earned " + Ui.money(x.net) + ", " + Ui.hours(x.hours) : ", nothing logged") + (payday ? ", payday" : "") + dueTxt + (today ? ", today" : ""));
         // Long-press any day to log a shift on it
         f.setOnLongClickListener(new View.OnLongClickListener() {
             @Override public boolean onLongClick(View v) { Ui.haptic(v); a.push(EntryEditorPage.forDay(date)); return true; }
@@ -300,11 +346,43 @@ public class CalendarPage extends Page {
         return f;
     }
 
-    private View selectedCard(final LocalDate date, Act x, boolean payday) {
+    /** White-ringed dot so it stays visible on dark heatmap cells. */
+    private static final class GradientDrawableHolder {
+        static void dot(View v, int color, boolean onColour) {
+            android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+            g.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            g.setColor(color);
+            if (onColour) g.setStroke(Math.max(1, Ui.dp(1)), 0xFFFFFFFF);
+            v.setBackground(g);
+        }
+    }
+
+    private View selectedCard(final LocalDate date, Act x, boolean payday, List<Model.Bill> due) {
         LinearLayout c = Ui.card();
         c.setLayoutParams(Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 0));
         c.addView(Ui.caption(date.format(DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.UK))));
         c.addView(Ui.space(10));
+        if (due != null && !due.isEmpty()) {
+            double sum = 0;
+            for (Model.Bill b : due) sum += b.amount;
+            c.addView(Ui.text((due.size() == 1 ? "1 payment" : due.size() + " payments") + " due · " + Ui.money(sum), 13, 600, Theme.text2));
+            for (final Model.Bill b : due) {
+                LinearLayout r = Ui.h();
+                r.setPadding(0, Ui.dp(8), 0, Ui.dp(8));
+                r.addView(Ui.badge(BillsPage.icon(b.category), BillsPage.color(b.category), 36));
+                r.addView(Ui.space(12));
+                LinearLayout t = Ui.v();
+                t.addView(Ui.single(b.name, 15.5f, 600, Theme.text));
+                t.addView(Ui.single((b.trial && date.equals(BillsPage.anchor(b)) ? "First charge after free trial" : (b.subscription ? "Subscription" : "Bill") + " · " + b.frequency.toLowerCase(Locale.UK))
+                        + (BillsPage.effectiveRemind(b) >= 0 ? " · reminder on" : ""), 13, 400, Theme.text2));
+                r.addView(t, Ui.weight(1));
+                r.addView(Ui.text(Ui.money(b.amount), 15.5f, 650, Theme.text));
+                Ui.tap(r, 10, new Runnable() { @Override public void run() { a.showTab(MainActivity.TAB_SUBS, true); } });
+                c.addView(r);
+            }
+            c.addView(Ui.divider(0));
+            c.addView(Ui.space(10));
+        }
         if (payday) {
             LinearLayout r = Ui.h();
             r.addView(Ui.badge("payments", Theme.green, 40));

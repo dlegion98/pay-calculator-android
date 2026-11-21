@@ -1,7 +1,7 @@
 {
-  "version": "6.4",
-  "versionCode": 64,
-  "size": 1155255,
-  "notes": "Subscriptions now have their own tab (Subs). Smoother tab transitions: pages slide together in the direction you're going, and the highlight pill glides and stretches between tabs. The + button floats above the bar and adds a subscription when you're on the Subs tab.",
+  "version": "6.5",
+  "versionCode": 65,
+  "size": 1159351,
+  "notes": "Subscriptions and bills now appear on the calendar as coloured dots, with the payments listed when you tap a day and monthly totals. New payment reminders: turn them on in the Subs tab or Settings, choose how far ahead (on the day to a week before) and what time.",
   "apk": "https://raw.githubusercontent.com/dlegion98/pay-calculator-android/main/releases/PayCalculator.apk"
 }
