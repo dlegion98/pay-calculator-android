@@ -467,8 +467,17 @@ public class MainActivity extends Activity {
         row.setPadding((useRail ? Ui.dp(RAIL_DP) : 0) + insetLeft, 0, insetRight, 0);
 
         // Bottom bar vs. navigation rail
-        // iOS tab bar: edge to edge, sitting on the gesture area
-        navBar.setPadding(insetLeft, 0, insetRight, navInset);
+        // Floating navigation bar (One UI 9 / Material You): a capsule above the gesture area
+        FrameLayout.LayoutParams np = (FrameLayout.LayoutParams) dock.getLayoutParams();
+        np.bottomMargin = navInset + Ui.dp(12);
+        int side = Ui.dp(w < 360 ? 10 : 16);
+        np.leftMargin = side + insetLeft;
+        np.rightMargin = side + insetRight;
+        LinearLayout.LayoutParams bp = (LinearLayout.LayoutParams) navBar.getLayoutParams();
+        if (w >= 600) { np.width = Ui.WRAP; np.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL; bp.width = Ui.dp(420); bp.weight = 0; }
+        else { np.width = Ui.MATCH; np.gravity = Gravity.BOTTOM; bp.width = 0; bp.weight = 1; }
+        navBar.setLayoutParams(bp);
+        dock.setLayoutParams(np);
         dock.setVisibility(!useRail && stack.isEmpty() && imeBottom == 0 ? View.VISIBLE : View.GONE);
         FrameLayout.LayoutParams rp = (FrameLayout.LayoutParams) rail.getLayoutParams();
         rp.leftMargin = insetLeft + Ui.dp(10);
@@ -477,12 +486,12 @@ public class MainActivity extends Activity {
         for (int i = 0; i < nav.getChildCount(); i++) {
             if (!(nav.getChildAt(i) instanceof LinearLayout)) continue;
             View lbl = ((LinearLayout) nav.getChildAt(i)).getChildAt(1);
-            if (lbl instanceof TextView) ((TextView) lbl).setTextSize(w < 360 ? 9.5f : 10.5f);
+            if (lbl instanceof TextView) ((TextView) lbl).setTextSize(w < 360 ? 10.5f : 12f);
         }
 
 
         for (int i = 0; i < 4; i++) {
-            if (tabViews[i] instanceof Scaffold) ((Scaffold) tabViews[i]).extraBottomDp = useRail ? 28 : 84;
+            if (tabViews[i] instanceof Scaffold) ((Scaffold) tabViews[i]).extraBottomDp = useRail ? 28 : 104;
         }
         if (changed) {
             for (Page t : tabs) if (t != null) t.render(false);
@@ -526,17 +535,37 @@ public class MainActivity extends Activity {
         } else if (i != currentTab) {
             tabs[i].render(true);
         }
+        boolean motion = animate && i != currentTab && currentTab >= 0 && !Ui.reducedMotion();
+        final int dir = i > currentTab ? 1 : -1;
         for (int j = 0; j < 4; j++) {
-            if (tabViews[j] == null) continue;
+            final View tv = tabViews[j];
+            if (tv == null) continue;
+            tv.animate().cancel();
             if (j == i) {
-                tabViews[j].setVisibility(View.VISIBLE);
-                if (animate) {
-                    tabViews[j].setAlpha(0f);
-                    tabViews[j].setTranslationX(Ui.dp(j > currentTab ? 28 : -28));
-                    tabViews[j].animate().alpha(1f).translationX(0).setDuration(380).setInterpolator(Ui.EMPHASIZED).start();
+                tv.setVisibility(View.VISIBLE);
+                tv.bringToFront();
+                if (motion) {
+                    // Incoming: fade through + scale up + slide from the direction of travel
+                    tv.setAlpha(0f);
+                    tv.setScaleX(0.94f); tv.setScaleY(0.94f);
+                    tv.setTranslationX(Ui.dp(40) * dir);
+                    tv.animate().alpha(1f).scaleX(1f).scaleY(1f).translationX(0).setStartDelay(70)
+                            .setDuration(420).setInterpolator(Ui.EMPHASIZED).withEndAction(null).start();
+                } else {
+                    tv.setAlpha(1f); tv.setScaleX(1f); tv.setScaleY(1f); tv.setTranslationX(0);
                 }
+            } else if (motion && j == currentTab && tv.getVisibility() == View.VISIBLE) {
+                // Outgoing: quick fade, shrink and drift the other way, then hide
+                tv.animate().alpha(0f).scaleX(0.96f).scaleY(0.96f).translationX(-Ui.dp(24) * dir).setStartDelay(0)
+                        .setDuration(150).setInterpolator(Ui.EMPHASIZED).withEndAction(new Runnable() {
+                            @Override public void run() {
+                                tv.setVisibility(View.GONE);
+                                tv.setAlpha(1f); tv.setScaleX(1f); tv.setScaleY(1f); tv.setTranslationX(0);
+                            }
+                        }).start();
             } else {
-                tabViews[j].setVisibility(View.GONE);
+                tv.setVisibility(View.GONE);
+                tv.setAlpha(1f); tv.setScaleX(1f); tv.setScaleY(1f); tv.setTranslationX(0);
             }
         }
         currentTab = i;
@@ -578,11 +607,11 @@ public class MainActivity extends Activity {
         item.setGravity(Gravity.CENTER_HORIZONTAL);
         item.setGravity(Gravity.CENTER);
         FrameLayout pill = new FrameLayout(this);
-        ImageView iv = Ui.icon(TAB_ICONS[idx], Theme.text2, 26);
-        pill.addView(iv, new FrameLayout.LayoutParams(Ui.dp(26), Ui.dp(26), Gravity.CENTER));
-        item.addView(pill, new LinearLayout.LayoutParams(Ui.dp(56), Ui.dp(28)));
-        TextView label = Ui.text(TAB_NAMES[idx], 10.5f, 500, Theme.text2);
-        label.setPadding(0, Ui.dp(2), 0, 0);
+        ImageView iv = Ui.icon(TAB_ICONS[idx], Theme.text2, 24);
+        pill.addView(iv, new FrameLayout.LayoutParams(Ui.dp(24), Ui.dp(24), Gravity.CENTER));
+        item.addView(pill, new LinearLayout.LayoutParams(Ui.dp(60), Ui.dp(32)));
+        TextView label = Ui.text(TAB_NAMES[idx], 12, 500, Theme.text2);
+        label.setPadding(0, Ui.dp(3), 0, 0);
         label.setSingleLine(true);
         label.setGravity(Gravity.CENTER_HORIZONTAL);
         item.addView(label, new LinearLayout.LayoutParams(Ui.MATCH, Ui.WRAP));
@@ -620,25 +649,28 @@ public class MainActivity extends Activity {
     }
 
     /** iOS tab bar: translucent material with a hairline top, four tabs and a central add button. */
+    /** Floating navigation bar: frosted capsule with Material You indicator pills, plus a separate add FAB. */
     private void buildNav() {
-        dock = Ui.v();
-        navBar = new Glass.Frost(this, 0, false).plainTop();
+        dock = Ui.h();
+        dock.setGravity(Gravity.CENTER_VERTICAL);
+        dock.setClipChildren(false);
+        dock.setClipToPadding(false);
+        navBar = new Glass.Frost(this, 35, true);
         navBar.setTarget(root);
+        shadow(navBar);
         navLens = new View(this);
         navLens.setVisibility(View.GONE);
         nav = Ui.h();
         nav.setGravity(Gravity.CENTER_VERTICAL);
-        for (int i = 0; i < 4; i++) {
-            if (i == 2) {
-                FrameLayout slot = new FrameLayout(this);
-                slot.addView(fab, new FrameLayout.LayoutParams(Ui.dp(46), Ui.dp(46), Gravity.CENTER));
-                nav.addView(slot, new LinearLayout.LayoutParams(0, Ui.MATCH, 1f));
-            }
-            nav.addView(navItem(i), new LinearLayout.LayoutParams(0, Ui.MATCH, 1f));
-        }
-        navBar.addView(nav, new FrameLayout.LayoutParams(Ui.MATCH, Ui.dp(54), Gravity.TOP));
-        dock.addView(navBar, new LinearLayout.LayoutParams(Ui.MATCH, Ui.WRAP));
-        root.addView(dock, new FrameLayout.LayoutParams(Ui.MATCH, Ui.WRAP, Gravity.BOTTOM));
+        nav.setPadding(Ui.dp(4), 0, Ui.dp(4), 0);
+        for (int i = 0; i < 4; i++) nav.addView(navItem(i), new LinearLayout.LayoutParams(0, Ui.MATCH, 1f));
+        navBar.addView(nav, new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
+        dock.addView(navBar, new LinearLayout.LayoutParams(0, Ui.dp(70), 1f));
+        dock.addView(Ui.space(12));
+        dock.addView(fab, new LinearLayout.LayoutParams(Ui.dp(64), Ui.dp(64)));
+        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(Ui.MATCH, Ui.WRAP, Gravity.BOTTOM);
+        p.setMargins(Ui.dp(16), 0, Ui.dp(16), Ui.dp(12));
+        root.addView(dock, p);
     }
 
     private static void shadow(View v) {
@@ -672,16 +704,25 @@ public class MainActivity extends Activity {
             item.setSelected(sel);
             iv.setImageResource(Ui.iconRes(TAB_ICONS[i] + (sel ? "_fill" : "")));
             boolean inDock = container == nav;
-            int on = inDock ? Theme.accent : Theme.onAccent;
-            int off = inDock ? (Theme.dark ? 0xFF8E8E93 : 0xFF999999) : Theme.text2;
+            int on = inDock ? (Theme.dark ? Theme.blend(Theme.accent, 0xFFFFFFFF, 0.25f) : Theme.blend(Theme.accent, 0xFF000000, 0.15f)) : Theme.onAccent;
+            int off = Theme.text2;
             iv.setImageTintList(android.content.res.ColorStateList.valueOf(sel ? on : off));
             label.setTextColor(sel ? (inDock ? on : Theme.accent) : off);
-            label.setTypeface(Ui.font(sel ? 600 : 500));
+            label.setTypeface(Ui.font(sel ? 700 : 500));
             label.setVisibility(inDock && dockCompact ? View.GONE : View.VISIBLE);
-            pill.setBackground(sel && !inDock ? Glass.gloss(Theme.accent, 16) : null);
-            if (sel && animate) {
-                pill.setScaleX(0.7f); pill.setScaleY(0.7f);
-                pill.animate().scaleX(1f).scaleY(1f).setDuration(520).setInterpolator(Ui.SPRING).start();
+            // Material You active indicator: a tonal pill that grows out from the icon
+            pill.setBackground(sel ? (inDock ? Glass.tinted(Theme.accent, 16) : Glass.gloss(Theme.accent, 16)) : null);
+            if (sel && animate && !Ui.reducedMotion()) {
+                pill.setScaleX(0.35f); pill.setScaleY(0.9f); pill.setAlpha(0.4f);
+                pill.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(520).setInterpolator(Ui.SPRING).start();
+                // One UI-style icon bounce
+                iv.setScaleX(0.75f); iv.setScaleY(0.75f); iv.setTranslationY(Ui.dp(3));
+                iv.animate().scaleX(1f).scaleY(1f).translationY(0).setStartDelay(40).setDuration(560).setInterpolator(Ui.SPRING).start();
+                label.setAlpha(0.3f);
+                label.animate().alpha(1f).setDuration(260).start();
+            } else if (!sel) {
+                pill.animate().cancel(); pill.setScaleX(1f); pill.setScaleY(1f); pill.setAlpha(1f);
+                iv.animate().cancel(); iv.setScaleX(1f); iv.setScaleY(1f); iv.setTranslationY(0);
             }
         }
     }
@@ -689,9 +730,16 @@ public class MainActivity extends Activity {
     private void buildFab() {
         fab = Ui.h();
         fab.setGravity(Gravity.CENTER);
-        fab.setBackground(Ui.oval(Theme.accent));
+        fab.setBackground(Glass.gloss(Theme.accent, 22));
+        shadow(fab);
+        if (!Theme.dark) fab.setOutlineSpotShadowColor(Theme.withAlpha(Theme.accent, 0.55f));
         fab.addView(Ui.icon("add", Theme.onAccent, 28));
-        Ui.tap(fab, 23, new Runnable() { @Override public void run() { AddHub.show(MainActivity.this); } });
+        Ui.tap(fab, 22, new Runnable() {
+            @Override public void run() {
+                if (!Ui.reducedMotion()) fab.animate().rotation(fab.getRotation() + 90).setDuration(420).setInterpolator(Ui.SPRING).start();
+                AddHub.show(MainActivity.this);
+            }
+        });
         fab.setContentDescription("Add pay");
     }
 
@@ -807,7 +855,7 @@ public class MainActivity extends Activity {
             bar.addView(a);
         }
         FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(Ui.MATCH, Ui.WRAP, Gravity.BOTTOM);
-        int bottom = navInset + Ui.dp(stack.isEmpty() && !useRail ? 66 : 20);
+        int bottom = navInset + Ui.dp(stack.isEmpty() && !useRail ? 92 : 20);
         p.setMargins(Ui.dp(20), 0, Ui.dp(20), bottom);
         snackLayer.addView(bar, p);
         bar.setTranslationY(Ui.dp(40));
