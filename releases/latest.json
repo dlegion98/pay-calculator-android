@@ -1,7 +1,7 @@
 {
-  "version": "6.5",
-  "versionCode": 65,
-  "size": 1159351,
-  "notes": "Subscriptions and bills now appear on the calendar as coloured dots, with the payments listed when you tap a day and monthly totals. New payment reminders: turn them on in the Subs tab or Settings, choose how far ahead (on the day to a week before) and what time.",
+  "version": "6.6",
+  "versionCode": 66,
+  "size": 1167543,
+  "notes": "Adding a subscription is quicker: as you type a name you get suggestions from about 100 UK services and bills (plus your own payments), and tapping one fills in the category and how often it repeats. Popular services also show their plans with typical UK prices (Nov 2026) that you can tap to fill in the amount.",
   "apk": "https://raw.githubusercontent.com/dlegion98/pay-calculator-android/main/releases/PayCalculator.apk"
 }

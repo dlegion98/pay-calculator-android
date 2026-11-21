@@ -30,6 +30,8 @@ and two panes.
 **Subscriptions & bills** (its own tab, Subs)
 - Track any recurring payment: weekly, fortnightly, monthly, quarterly or yearly.
 - Quick-add for popular services, and a split between subscriptions and bills.
+- Name suggestions as you type (about 100 UK services and bills, plus your own payments), with typical UK plan
+  prices (Nov 2026) you can tap to fill in.
 - Upcoming payments for the next 30 days, cost per month and per year, a breakdown by category, and the share
   of your take-home they use.
 - Free-trial alerts before the first charge and the option to pause a payment.

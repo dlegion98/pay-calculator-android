@@ -15,7 +15,7 @@ import java.util.Locale;
 
 /** One UI style grouped settings — port of iOS SettingsView. */
 public class SettingsPage extends Page {
-    public static final String VERSION = "6.5 (Android)";
+    public static final String VERSION = "6.6 (Android)";
 
     @Override public String title() { return "Settings"; }
 

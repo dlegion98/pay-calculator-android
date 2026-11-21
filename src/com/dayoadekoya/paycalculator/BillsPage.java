@@ -553,6 +553,21 @@ public class BillsPage extends Page {
         });
     }
 
+    private View suggestionRow(String title, String cat, String sub, Runnable onTap) {
+        LinearLayout r = Ui.h();
+        r.setPadding(Ui.dp(12), Ui.dp(9), Ui.dp(12), Ui.dp(9));
+        r.addView(Ui.badge(icon(cat), color(cat), 30));
+        r.addView(Ui.space(12));
+        LinearLayout t = Ui.v();
+        t.addView(Ui.single(title, 15.5f, 600, Theme.text));
+        t.addView(Ui.single(sub, 12.5f, 400, Theme.text2));
+        r.addView(t, Ui.weight(1));
+        r.addView(Ui.icon("chevron_right", Theme.text3, 18));
+        r.setContentDescription("Suggestion: " + title + ", " + sub);
+        Ui.tap(r, 12, onTap);
+        return r;
+    }
+
     private static Bill copy(Bill b) {
         Bill c = new Bill();
         c.name = b.name; c.amount = b.amount; c.dayOfMonth = b.dayOfMonth; c.category = b.category;
@@ -585,6 +600,121 @@ public class BillsPage extends Page {
         g.setBackground(Ui.rr(Theme.dark ? Theme.field : Theme.surface, 12));
         final Runnable[] draw = new Runnable[1];
 
+        // Type-ahead: matching services (and your own payments) as you type, then plan prices
+        final LinearLayout suggest = Ui.v();
+        suggest.setBackground(Ui.rr(Theme.dark ? Theme.field : Theme.surface, 12));
+        suggest.setVisibility(View.GONE);
+        final LinearLayout plansBox = Ui.v();
+        plansBox.setVisibility(View.GONE);
+        final FrameLayout kindBox = new FrameLayout(a);
+        final boolean[] applying = {false};
+        final Runnable[] showPlans = new Runnable[1];
+        final Runnable drawKind = new Runnable() {
+            @Override public void run() {
+                kindBox.removeAllViews();
+                kindBox.addView(Ui.segmented(new String[]{"Subscription", "Bill"}, b.subscription ? 0 : 1, new Ui.Fn<Integer>() {
+                    @Override public void on(Integer i) { b.subscription = i == 0; }
+                }));
+            }
+        };
+        final Ui.Fn<Catalog.Service> apply = new Ui.Fn<Catalog.Service>() {
+            @Override public void on(Catalog.Service sv) {
+                applying[0] = true;
+                name.setText(sv.name);
+                name.setSelection(sv.name.length());
+                applying[0] = false;
+                b.category = sv.category; b.frequency = sv.frequency; b.subscription = sv.subscription;
+                suggest.setVisibility(View.GONE);
+                Ui.haptic(name);
+                draw[0].run();
+                drawKind.run();
+                showPlans[0].run();
+                if (sv.plans.isEmpty()) amount.requestFocus();
+            }
+        };
+        showPlans[0] = new Runnable() {
+            @Override public void run() {
+                plansBox.removeAllViews();
+                String typed = name.getText().toString().trim();
+                Catalog.Service sv = Catalog.exact(typed);
+                List<Object[]> chips = new ArrayList<Object[]>();   // label, price, frequency
+                if (sv != null) for (Catalog.Plan pl : sv.plans) chips.add(new Object[]{pl.label, pl.price, pl.frequency});
+                for (Bill o : Store.bills) {
+                    if (existing != null && o.id.equals(existing.id)) continue;
+                    if (!typed.isEmpty() && o.name.equalsIgnoreCase(typed)) chips.add(new Object[]{"You pay", o.amount, o.frequency});
+                }
+                if (chips.isEmpty()) { plansBox.setVisibility(View.GONE); return; }
+                plansBox.addView(Ui.caption("Tap a plan to fill the price"), Ui.lpm(Ui.MATCH, Ui.WRAP, 4, 0, 0, 6));
+                HorizontalScrollView hs = new HorizontalScrollView(a);
+                hs.setHorizontalScrollBarEnabled(false);
+                LinearLayout row = Ui.h();
+                for (final Object[] c : chips) {
+                    final double price = (Double) c[1];
+                    final String freq = (String) c[2];
+                    String suffix = "Yearly".equals(freq) ? "/yr" : "Weekly".equals(freq) ? "/wk" : "Quarterly".equals(freq) ? "/qtr" : "/mo";
+                    View ch = Ui.chip("payments", c[0] + " · " + Store.currency() + String.format(Locale.UK, "%.2f", price) + suffix, color(b.category));
+                    ch.setContentDescription(c[0] + ", " + Ui.money(price) + " " + freq.toLowerCase(Locale.UK) + ". Tap to use this price");
+                    Ui.tap(ch, 50, new Runnable() {
+                        @Override public void run() {
+                            amount.setText(Ui.num(price));
+                            amount.setSelection(amount.getText().length());
+                            b.frequency = freq;
+                            Ui.haptic(amount);
+                            draw[0].run();
+                        }
+                    });
+                    row.addView(ch, Ui.lpm(Ui.WRAP, Ui.WRAP, 0, 0, 8, 0));
+                }
+                hs.addView(row);
+                plansBox.addView(hs);
+                if (sv != null && !sv.plans.isEmpty()) {
+                    TextView note = Ui.text("Typical UK prices (" + Catalog.PRICES_AS_OF + "). Prices change, so check yours.", 11.5f, 400, Theme.text2);
+                    note.setPadding(Ui.dp(4), Ui.dp(6), 0, 0);
+                    plansBox.addView(note);
+                }
+                plansBox.setVisibility(View.VISIBLE);
+            }
+        };
+        name.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence x, int st, int c, int af) {}
+            @Override public void onTextChanged(CharSequence x, int st, int bf, int c) {}
+            @Override public void afterTextChanged(android.text.Editable x) {
+                if (applying[0]) return;
+                String q = x.toString().trim();
+                suggest.removeAllViews();
+                showPlans[0].run();
+                if (q.isEmpty() || Catalog.exact(q) != null) { suggest.setVisibility(View.GONE); return; }
+                // Your own payments first (handy for a second phone line or another gym)
+                final String ql = q.toLowerCase(Locale.UK);
+                int shown = 0;
+                for (final Bill o : Store.bills) {
+                    if (shown >= 2) break;
+                    if (existing != null && o.id.equals(existing.id)) continue;
+                    if (!o.name.toLowerCase(Locale.UK).contains(ql)) continue;
+                    if (suggest.getChildCount() > 0) suggest.addView(Ui.divider(56));
+                    suggest.addView(suggestionRow(o.name, o.category, "Yours · " + Ui.money(o.amount) + " " + o.frequency.toLowerCase(Locale.UK), new Runnable() {
+                        @Override public void run() {
+                            applying[0] = true; name.setText(o.name); name.setSelection(o.name.length()); applying[0] = false;
+                            b.category = o.category; b.frequency = o.frequency; b.subscription = o.subscription;
+                            amount.setText(Ui.num(o.amount));
+                            suggest.setVisibility(View.GONE);
+                            Ui.haptic(name);
+                            draw[0].run(); drawKind.run(); showPlans[0].run();
+                        }
+                    }));
+                    shown++;
+                }
+                for (final Catalog.Service sv : Catalog.search(q, 6 - shown)) {
+                    if (suggest.getChildCount() > 0) suggest.addView(Ui.divider(56));
+                    double from = sv.from();
+                    String sub = sv.category + (from > 0 ? (sv.plans.size() > 1 ? " · from " : " · ") + Store.currency() + String.format(Locale.UK, "%.2f", from) + ("Yearly".equals(sv.frequency) ? "/yr" : "/mo")
+                            : sv.plans.isEmpty() ? " · enter your price" : "");
+                    suggest.addView(suggestionRow(sv.name, sv.category, sub, new Runnable() { @Override public void run() { apply.on(sv); } }));
+                }
+                suggest.setVisibility(suggest.getChildCount() > 0 ? View.VISIBLE : View.GONE);
+            }
+        });
+
         // Quick picks for popular services
         if (existing == null) {
             h.body.addView(Ui.caption("Popular"), Ui.lpm(Ui.MATCH, Ui.WRAP, 4, 0, 0, 8));
@@ -595,10 +725,12 @@ public class BillsPage extends Page {
                 View ch = Ui.chip(icon(p[1]), p[0], color(p[1]));
                 Ui.tap(ch, 50, new Runnable() {
                     @Override public void run() {
-                        name.setText(p[0]);
+                        Catalog.Service sv = Catalog.exact(p[0]);
+                        if (sv != null) { apply.on(sv); return; }
+                        applying[0] = true; name.setText(p[0]); applying[0] = false;
                         b.category = p[1]; b.frequency = p[2]; b.subscription = "1".equals(p[3]);
                         Ui.haptic(name);
-                        draw[0].run();
+                        draw[0].run(); drawKind.run(); showPlans[0].run();
                         amount.requestFocus();
                     }
                 });
@@ -608,11 +740,12 @@ public class BillsPage extends Page {
             h.body.addView(hs, Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 12));
         }
         h.body.addView(name, Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 8));
+        h.body.addView(suggest, Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 8));
+        h.body.addView(plansBox, Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 10));
         h.body.addView(amount, Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 10));
-        final LinearLayout kind = Ui.segmented(new String[]{"Subscription", "Bill"}, b.subscription ? 0 : 1, new Ui.Fn<Integer>() {
-            @Override public void on(Integer i) { b.subscription = i == 0; }
-        });
-        h.body.addView(kind, Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 10));
+        drawKind.run();
+        h.body.addView(kindBox, Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 10));
+        showPlans[0].run();
 
         draw[0] = new Runnable() {
             @Override public void run() {
