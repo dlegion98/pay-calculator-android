@@ -17,6 +17,6 @@ zipalign -f -p 4 build/unsigned.apk build/aligned.apk
 KEYPASS="${PAYCALC_KEY_PASS:-$( [ -f keystore.properties ] && sed -n 's/^password=//p' keystore.properties )}"
 [ -n "$KEYPASS" ] || { echo "Set PAYCALC_KEY_PASS or create keystore.properties (password=...)"; exit 1; }
 [ -f release.jks ] || keytool -genkeypair -keystore release.jks -storepass "$KEYPASS" -keypass "$KEYPASS" -alias paycalc -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Pay Calculator, O=Dayo Adekoya, C=GB" 2>/dev/null
-apksigner sign --ks release.jks --ks-pass "pass:$KEYPASS" --key-pass "pass:$KEYPASS" --out build/PayCalculator.apk build/aligned.apk
+apksigner sign --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --ks release.jks --ks-pass "pass:$KEYPASS" --key-pass "pass:$KEYPASS" --out build/PayCalculator.apk build/aligned.apk
 apksigner verify build/PayCalculator.apk && echo "BUILD OK"
 ls -la build/PayCalculator.apk

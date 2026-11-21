@@ -181,7 +181,8 @@ public final class Updater {
         notes = notes.replace("**", "").replace("### ", "").replace("## ", "");
         String size = r.size > 0 ? String.format(java.util.Locale.UK, " · %.1f MB", r.size / 1048576.0) : "";
         Sheets.confirm(a, "Update to " + r.version + size,
-                "You have " + currentVersion(a) + ". Your data stays as it is.\n\n" + notes,
+                "You have " + currentVersion(a) + ". Your data stays as it is.\n\n" + notes
+                        + "\n\nAndroid may show a Google Play Protect “App scan recommended” message, because this app isn't from the Play Store. Tap “Scan app” and the install carries on once it's checked.",
                 "Update now", false, new Runnable() {
                     @Override public void run() { download(a, r); }
                 });

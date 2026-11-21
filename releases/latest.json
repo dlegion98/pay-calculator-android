@@ -1,7 +1,7 @@
 {
-  "version": "6.6",
-  "versionCode": 66,
+  "version": "6.7",
+  "versionCode": 67,
   "size": 1167543,
-  "notes": "Adding a subscription is quicker: as you type a name you get suggestions from about 100 UK services and bills (plus your own payments), and tapping one fills in the category and how often it repeats. Popular services also show their plans with typical UK prices (Nov 2026) that you can tap to fill in the amount.",
+  "notes": "The APK now carries every Android signature type, and the update screen explains Google Play Protect's 'App scan recommended' message (tap Scan app and the update carries on).",
   "apk": "https://raw.githubusercontent.com/dlegion98/pay-calculator-android/main/releases/PayCalculator.apk"
 }
