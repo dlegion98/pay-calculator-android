@@ -1,7 +1,7 @@
 {
-  "version": "6.8",
-  "versionCode": 68,
-  "size": 1171639,
-  "notes": "Fixed the lock screen layout. New: credit card and loan payments. Add your balance and APR to see when it'll be cleared, total interest, interest per month and how much an extra \u00a350 would save. Suggestions now include UK card issuers (Amex, Barclaycard, Capital One, Vanquis, Aqua\u2026), buy now pay later, lenders, mobile networks, water companies, insurers and gyms.",
+  "version": "6.9",
+  "versionCode": 69,
+  "size": 1179831,
+  "notes": "Credit cards: add your credit limit to see available credit and how much you're using, plus your statement minimum. Tap a card to make a payment any time (it comes off the balance) or plan an extra payment for next month or any date. Planned payments count towards your payoff estimate and show in upcoming payments, on the calendar and in reminders. Also fixes editing a card losing its balance and APR.",
   "apk": "https://raw.githubusercontent.com/dlegion98/pay-calculator-android/main/releases/PayCalculator.apk"
 }

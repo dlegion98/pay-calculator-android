@@ -320,6 +320,14 @@ public final class Store {
         o.put("subscription", b.subscription); o.put("remindDays", b.remindDays);
         o.put("paused", b.paused); o.put("trial", b.trial); o.put("notes", b.notes);
         o.put("balance", b.balance); o.put("apr", b.apr); o.put("payInFull", b.payInFull); o.put("balanceMillis", b.balanceMillis);
+        o.put("creditLimit", b.creditLimit); o.put("minPayment", b.minPayment);
+        JSONArray cp = new JSONArray();
+        for (Model.CardPayment p : b.payments) {
+            JSONObject x = new JSONObject();
+            x.put("id", p.id); x.put("dateMillis", p.dateMillis); x.put("amount", p.amount); x.put("planned", p.planned); x.put("note", p.note);
+            cp.put(x);
+        }
+        o.put("cardPayments", cp);
         return o;
     }
 
@@ -341,6 +349,17 @@ public final class Store {
         b.apr = o.optDouble("apr", 0);
         b.payInFull = o.optBoolean("payInFull", false);
         b.balanceMillis = o.optLong("balanceMillis", 0);
+        b.creditLimit = o.optDouble("creditLimit", 0);
+        b.minPayment = o.optDouble("minPayment", 0);
+        JSONArray cp = o.optJSONArray("cardPayments");
+        if (cp != null) for (int i = 0; i < cp.length(); i++) {
+            JSONObject x = cp.optJSONObject(i);
+            if (x == null) continue;
+            Model.CardPayment p = new Model.CardPayment();
+            p.id = x.optString("id", Model.newId()); p.dateMillis = x.optLong("dateMillis", 0);
+            p.amount = x.optDouble("amount", 0); p.planned = x.optBoolean("planned", false); p.note = x.optString("note", "");
+            b.payments.add(p);
+        }
         return b;
     }
 

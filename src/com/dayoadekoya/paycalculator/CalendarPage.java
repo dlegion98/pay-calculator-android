@@ -125,6 +125,15 @@ public class CalendarPage extends Page {
                 dueTotal += b.amount;
             }
         }
+        // Planned extra card/loan payments
+        for (Object[] x : BillsPage.extrasIn(month.atDay(1), month.atEndOfMonth())) {
+            Model.Bill eb = BillsPage.extraAsBill((Model.Bill) x[1], (Model.CardPayment) x[2]);
+            LocalDate d = (LocalDate) x[0];
+            List<Model.Bill> l = dues.get(d);
+            if (l == null) { l = new java.util.ArrayList<Model.Bill>(); dues.put(d, l); }
+            l.add(eb);
+            dueTotal += eb.amount;
+        }
         double maxNet = 1, total = 0, hours = 0, prevTotal = 0;
         LocalDate bestDay = null; double best = 0;
         for (Map.Entry<LocalDate, Act> en : act.entrySet()) {

@@ -36,7 +36,10 @@ and two panes.
   of your take-home they use.
 - Free-trial alerts before the first charge and the option to pause a payment.
 - Credit cards and loans: balance, APR, pay-in-full; time to clear, total interest, interest per month and an
-  overpayment tip. Suggestions include UK card issuers, buy-now-pay-later firms and lenders.
+  overpayment tip.
+  Credit limit and available credit (with utilisation), minimum payment, recording payments at any time, and
+  planning one-off extra payments for future dates. Planned payments count towards the payoff estimate and show in
+  upcoming payments, on the calendar and in reminders. Suggestions include UK card issuers, buy-now-pay-later firms and lenders.
 - Payment reminders: one switch for all payments, with lead time (on the day up to a week before) and time of day,
   plus per-payment overrides.
 - Payments show on the calendar as coloured dots, with the day's payments and monthly totals.

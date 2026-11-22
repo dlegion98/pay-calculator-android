@@ -126,5 +126,17 @@ public final class Model {
         public double apr;                     // annual interest rate, %
         public boolean payInFull;              // card cleared in full each month (no interest)
         public long balanceMillis;             // when the balance was last updated
+        public double creditLimit;             // card limit (0 = not set)
+        public double minPayment;              // statement minimum (0 = not set)
+        public java.util.List<CardPayment> payments = new java.util.ArrayList<CardPayment>();
+    }
+
+    /** A one-off card/loan payment: made (reduces the balance) or planned for a future date. */
+    public static final class CardPayment {
+        public String id = newId();
+        public long dateMillis;
+        public double amount;
+        public boolean planned;
+        public String note = "";
     }
 }

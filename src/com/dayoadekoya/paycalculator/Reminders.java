@@ -40,6 +40,29 @@ public class Reminders extends BroadcastReceiver {
         ensureChannel(c);
         LocalDate today = LocalDate.now();
         NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
+        // Planned extra card/loan payments
+        for (Object[] x : BillsPage.extrasIn(today, today.plusDays(14))) {
+            Model.Bill b = (Model.Bill) x[1];
+            Model.CardPayment p = (Model.CardPayment) x[2];
+            int lead = BillsPage.effectiveRemind(b);
+            if (lead < 0) continue;
+            long days = java.time.temporal.ChronoUnit.DAYS.between(today, (LocalDate) x[0]);
+            if (days != lead) continue;
+            String whenTxt = days == 0 ? "today" : days == 1 ? "tomorrow" : "in " + days + " days";
+            Intent open = new Intent(c, MainActivity.class);
+            open.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            open.putExtra(MainActivity.EXTRA_SHORTCUT, "bills");
+            PendingIntent content = PendingIntent.getActivity(c, 41, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            Notification n = new Notification.Builder(c, BILL_CHANNEL)
+                    .setSmallIcon(R.drawable.ic_event_repeat)
+                    .setContentTitle("Extra payment to " + b.name + " " + whenTxt)
+                    .setContentText(Ui.money(p.amount) + " planned on top of your usual payment" + (p.note.isEmpty() ? "" : " · " + p.note))
+                    .setColor(BillsPage.color(b.category))
+                    .setContentIntent(content)
+                    .setAutoCancel(true)
+                    .build();
+            try { nm.notify(2000 + Math.abs(p.id.hashCode() % 50000), n); } catch (Throwable ignored) {}
+        }
         for (Model.Bill b : Store.bills) {
             int lead = BillsPage.effectiveRemind(b);
             if (lead < 0) continue;
