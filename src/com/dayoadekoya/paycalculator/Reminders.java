@@ -153,7 +153,11 @@ public class Reminders extends BroadcastReceiver {
             return;
         }
         if (ACTION_BILLS.equals(action)) {
-            try { if (!Store.ready()) Store.init(c); notifyBills(c); } catch (Throwable t) { t.printStackTrace(); }
+            try {
+                if (!Store.ready()) Store.init(c);
+                if (BillsPage.rollAll()) Store.changed();
+                notifyBills(c);
+            } catch (Throwable t) { t.printStackTrace(); }
             reschedule(c);
             return;
         }

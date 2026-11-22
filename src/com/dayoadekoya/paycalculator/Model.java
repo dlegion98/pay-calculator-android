@@ -127,7 +127,12 @@ public final class Model {
         public boolean payInFull;              // card cleared in full each month (no interest)
         public long balanceMillis;             // when the balance was last updated
         public double creditLimit;             // card limit (0 = not set)
-        public double minPayment;              // statement minimum (0 = not set)
+        public double minPayment;              // statement minimum (0 = not set); recalculated when minRule > 0
+        public int minRule;                    // 0 entered by hand, 1 = 1% + interest, 2 = 2%, 3 = 2.5%, 4 = 3% of balance
+        public double minFloor = 5;            // lowest minimum the card charges
+        public boolean followMinimum;          // monthly payment = minimum (updates as the balance changes)
+        public boolean autoRoll = true;        // each payment date: add interest, take off the payment
+        public long rolledMillis;              // last date the balance was rolled forward to
         public java.util.List<CardPayment> payments = new java.util.ArrayList<CardPayment>();
     }
 

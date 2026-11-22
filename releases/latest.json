@@ -1,7 +1,7 @@
 {
-  "version": "6.9",
-  "versionCode": 69,
-  "size": 1179831,
-  "notes": "Credit cards: add your credit limit to see available credit and how much you're using, plus your statement minimum. Tap a card to make a payment any time (it comes off the balance) or plan an extra payment for next month or any date. Planned payments count towards your payoff estimate and show in upcoming payments, on the calendar and in reminders. Also fixes editing a card losing its balance and APR.",
+  "version": "7.0",
+  "versionCode": 70,
+  "size": 1183927,
+  "notes": "Smart credit card updates: when you pay more than the minimum or clear the card, the interest, minimum payment and your next payment update automatically, and you're told what changed (and how much sooner it'll be cleared). Choose how your card works out its minimum (e.g. 1% + interest), whether you pay the minimum, a fixed amount or in full, and turn on Smart monthly updates to roll the balance forward on each payment date.",
   "apk": "https://raw.githubusercontent.com/dlegion98/pay-calculator-android/main/releases/PayCalculator.apk"
 }

@@ -365,6 +365,8 @@ public class MainActivity extends Activity {
         super.onResume();
         current = this;
         if (root == null) return; // diagnostic screen
+        // Smart credit updates: roll cards forward to today (interest in, regular payment out, new minimum)
+        try { if (BillsPage.rollAll()) Store.changed(); } catch (Throwable t) { t.printStackTrace(); }
         MeshSync.onChange = new Runnable() { @Override public void run() { if (tabs[TAB_SETTINGS] != null && currentTab == TAB_SETTINGS && stack.isEmpty()) tabs[TAB_SETTINGS].refresh(); } };
         try { MeshSync.start(this); } catch (Throwable t) { t.printStackTrace(); }
         internalNav = false;

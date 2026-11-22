@@ -321,6 +321,8 @@ public final class Store {
         o.put("paused", b.paused); o.put("trial", b.trial); o.put("notes", b.notes);
         o.put("balance", b.balance); o.put("apr", b.apr); o.put("payInFull", b.payInFull); o.put("balanceMillis", b.balanceMillis);
         o.put("creditLimit", b.creditLimit); o.put("minPayment", b.minPayment);
+        o.put("minRule", b.minRule); o.put("minFloor", b.minFloor); o.put("followMinimum", b.followMinimum);
+        o.put("autoRoll", b.autoRoll); o.put("rolledMillis", b.rolledMillis);
         JSONArray cp = new JSONArray();
         for (Model.CardPayment p : b.payments) {
             JSONObject x = new JSONObject();
@@ -351,6 +353,11 @@ public final class Store {
         b.balanceMillis = o.optLong("balanceMillis", 0);
         b.creditLimit = o.optDouble("creditLimit", 0);
         b.minPayment = o.optDouble("minPayment", 0);
+        b.minRule = o.optInt("minRule", 0);
+        b.minFloor = o.optDouble("minFloor", 5);
+        b.followMinimum = o.optBoolean("followMinimum", false);
+        b.autoRoll = o.optBoolean("autoRoll", true);
+        b.rolledMillis = o.optLong("rolledMillis", 0);
         JSONArray cp = o.optJSONArray("cardPayments");
         if (cp != null) for (int i = 0; i < cp.length(); i++) {
             JSONObject x = cp.optJSONObject(i);

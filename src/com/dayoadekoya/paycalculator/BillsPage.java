@@ -105,6 +105,103 @@ public class BillsPage extends Page {
         return Ui.money(b.balance, 0) + " owed · clear in " + duration(p.months) + (p.interest >= 1 ? " · " + Ui.money(p.interest, 0) + " interest" : "");
     }
 
+    // ------------------------------------------------------------------ smart credit updates
+
+    static final String[] MIN_RULES = {"Enter it myself", "1% of balance + interest", "2% of balance", "2.5% of balance", "3% of balance"};
+    static final String[] PAY_MODES = {"The minimum (updates automatically)", "A fixed amount", "The full balance"};
+
+    static int periodsPerYear(Bill b) {
+        switch (b.frequency) { case "Weekly": return 52; case "Fortnightly": return 26; case "Quarterly": return 4; case "Yearly": return 1; default: return 12; }
+    }
+
+    /** Interest added each payment period at the current balance. */
+    static double periodInterest(Bill b) { return b.payInFull || b.balance <= 0 ? 0 : b.balance * Math.max(0, b.apr) / 100.0 / periodsPerYear(b); }
+
+    /** The card's minimum payment from its rule (the usual UK formulas), never below the floor or above the balance. */
+    static double computeMin(Bill b) {
+        if (b.balance <= 0.005) return 0;
+        double m;
+        switch (b.minRule) {
+            case 1: m = b.balance * 0.01 + b.balance * Math.max(0, b.apr) / 1200.0; break;
+            case 2: m = b.balance * 0.02; break;
+            case 3: m = b.balance * 0.025; break;
+            case 4: m = b.balance * 0.03; break;
+            default: return b.minPayment;
+        }
+        m = Math.max(m, b.minFloor);
+        m = Math.min(m, b.balance);
+        return Math.ceil(m * 100) / 100.0;
+    }
+
+    /** Re-derives the minimum and (if you pay the minimum or in full) the monthly payment from the balance. */
+    static void recalc(Bill b) {
+        if (!isCredit(b)) return;
+        if (b.balance <= 0.005) {
+            b.balance = 0;
+            if (b.minRule != 0) b.minPayment = 0;
+            if (b.followMinimum || b.payInFull) b.amount = 0;
+            return;
+        }
+        if (b.minRule != 0) b.minPayment = computeMin(b);
+        if (b.payInFull) b.amount = Math.round(b.balance * 100) / 100.0;
+        else if (b.followMinimum && b.minPayment > 0) b.amount = b.minPayment;
+    }
+
+    /** Before/after snapshot so a payment can say what changed. */
+    static final class Snap {
+        final double bal, interest, min, pay; final Payoff po;
+        Snap(Bill b) { bal = b.balance; interest = periodInterest(b); min = b.minPayment; pay = b.amount; po = payoff(b, b.amount); }
+    }
+
+    static String changes(Bill b, Snap was) {
+        if (was.bal > 0 && b.balance <= 0) return b.name + " is paid off 🎉 No more interest" + (b.followMinimum || b.payInFull ? " and no payment due" : "");
+        List<String> parts = new ArrayList<String>();
+        parts.add("Balance " + Ui.money(b.balance));
+        double i = periodInterest(b);
+        if (Math.abs(i - was.interest) >= 0.01) parts.add("interest " + Ui.money(i) + "/mo (was " + Ui.money(was.interest) + ")");
+        if (b.minRule != 0 && Math.abs(b.minPayment - was.min) >= 0.01) parts.add("minimum " + Ui.money(b.minPayment) + " (was " + Ui.money(was.min) + ")");
+        if ((b.followMinimum || b.payInFull) && Math.abs(b.amount - was.pay) >= 0.01) parts.add("next payment " + Ui.money(b.amount));
+        Payoff now = payoff(b, b.amount);
+        if (!was.po.never && !now.never && was.po.months > now.months) parts.add("clears " + duration(was.po.months - now.months) + " sooner");
+        else if (was.po.never && !now.never && b.balance > 0) parts.add("now clears in " + duration(now.months));
+        return android.text.TextUtils.join(" · ", parts);
+    }
+
+    /**
+     * Rolls cards forward to today: on each payment date since the last roll, adds that period's
+     * interest, takes off the regular payment (logged as automatic) and recalculates the minimum.
+     * @return true if anything changed (caller saves).
+     */
+    public static boolean rollAll() {
+        boolean changed = false;
+        LocalDate today = LocalDate.now();
+        for (Bill b : Store.bills) {
+            if (!isCredit(b) || b.paused || !b.autoRoll) continue;
+            if (b.rolledMillis <= 0) { b.rolledMillis = TaxEngine.toMillis(today); changed = true; continue; }
+            LocalDate from = TaxEngine.toDate(b.rolledMillis).plusDays(1);
+            if (from.isAfter(today)) continue;
+            if (b.balance > 0) {
+                for (LocalDate d : occurrences(b, from, today)) {
+                    if (b.balance <= 0.005) break;
+                    b.balance += periodInterest(b);
+                    double pay = b.payInFull ? b.balance : Math.min(b.amount, b.balance);
+                    if (pay <= 0) continue;
+                    b.balance = Math.max(0, b.balance - pay);
+                    Model.CardPayment cp = new Model.CardPayment();
+                    cp.amount = Math.round(pay * 100) / 100.0;
+                    cp.dateMillis = TaxEngine.toMillis(d);
+                    cp.note = "Regular payment (automatic)";
+                    b.payments.add(0, cp);
+                    recalc(b);
+                }
+                b.balanceMillis = System.currentTimeMillis();
+            }
+            b.rolledMillis = TaxEngine.toMillis(today);
+            changed = true;
+        }
+        return changed;
+    }
+
     static double available(Bill b) { return b.creditLimit > 0 ? b.creditLimit - b.balance : 0; }
 
     static double plannedTotal(Bill b) {
@@ -142,13 +239,14 @@ public class BillsPage extends Page {
         p.planned = date.isAfter(LocalDate.now());
         if (!p.planned) { b.balance = Math.max(0, b.balance - amount); b.balanceMillis = System.currentTimeMillis(); }
         b.payments.add(p);
+        recalc(b);
         Collections.sort(b.payments, new Comparator<Model.CardPayment>() {
             @Override public int compare(Model.CardPayment x, Model.CardPayment y) { return Long.compare(y.dateMillis, x.dateMillis); }
         });
     }
 
     static void confirmPlanned(Bill b, Model.CardPayment p, boolean paid) {
-        if (paid) { p.planned = false; b.balance = Math.max(0, b.balance - p.amount); b.balanceMillis = System.currentTimeMillis(); }
+        if (paid) { p.planned = false; b.balance = Math.max(0, b.balance - p.amount); b.balanceMillis = System.currentTimeMillis(); recalc(b); }
         else b.payments.remove(p);
     }
 
@@ -298,6 +396,7 @@ public class BillsPage extends Page {
     static List<LocalDate> occurrences(Bill b, LocalDate start, LocalDate end) {
         List<LocalDate> out = new ArrayList<LocalDate>();
         if (b.paused) return out;
+        if (isCredit(b) && b.amount <= 0.004) return out;   // cleared card: nothing to pay
         LocalDate a = anchor(b);
         LocalDate d = nextDue(b, start);
         long k = Math.max(0, approxIndex(b, a, d));
@@ -447,8 +546,9 @@ public class BillsPage extends Page {
                 LinearLayout btns = Ui.h();
                 btns.setPadding(0, Ui.dp(12), 0, 0);
                 btns.addView(Ui.primary("Yes, paid", "check", new Runnable() { @Override public void run() {
+                    Snap was = new Snap(b);
                     confirmPlanned(b, p, true); Store.changed(); Ui.confirmHaptic(s);
-                    a.snack(b.name + " balance now " + Ui.money(b.balance)); render(false);
+                    a.snack(changes(b, was)); render(false);
                 } }), Ui.weight(1));
                 btns.addView(Ui.space(10));
                 btns.addView(Ui.tonal("Didn't pay", "close", new Runnable() { @Override public void run() {
@@ -687,8 +787,11 @@ public class BillsPage extends Page {
                     + (u > 0.3 ? ". Keeping it under 30% can help your credit score." : ""), 13, 500, Theme.text2));
         }
         StringBuilder payTxt = new StringBuilder();
-        if (b.minPayment > 0) payTxt.append("Minimum ").append(Ui.money(b.minPayment)).append(" · ");
-        payTxt.append(b.payInFull ? "you pay the full balance" : "you pay " + Ui.money(b.amount) + " " + b.frequency.toLowerCase(Locale.UK));
+        if (b.minPayment > 0) payTxt.append("Minimum ").append(Ui.money(b.minPayment)).append(b.minRule != 0 ? " (auto)" : "").append(" · ");
+        payTxt.append(b.payInFull ? "you pay the full balance (" + Ui.money(b.amount) + ")"
+                : b.followMinimum ? "you pay the minimum"
+                : "you pay " + Ui.money(b.amount) + " " + b.frequency.toLowerCase(Locale.UK));
+        if (b.balance > 0 && !b.payInFull) payTxt.append("\nInterest about ").append(Ui.money(periodInterest(b))).append(" a month at ").append(Ui.num(b.apr)).append("% APR");
         TextView pt = Ui.text(payTxt.toString(), 14, 600, Theme.text);
         pt.setPadding(0, Ui.dp(12), 0, Ui.dp(2));
         h.body.addView(pt);
@@ -696,6 +799,8 @@ public class BillsPage extends Page {
             h.body.addView(Ui.text("Your usual payment is below the minimum. Pay at least " + Ui.money(b.minPayment) + " to avoid fees.", 13, 600, Theme.red));
         Payoff po = payoff(b, b.amount);
         h.body.addView(Ui.text(creditLine(b, b.amount), 13, 500, po.never ? Theme.red : Theme.text2));
+        if (b.autoRoll && b.balance > 0)
+            h.body.addView(Ui.text("Smart updates on: each payment date adds interest, takes off your payment and recalculates the minimum.", 12, 500, Theme.accent));
         if (b.balanceMillis > 0) {
             long days = ChronoUnit.DAYS.between(TaxEngine.toDate(b.balanceMillis), LocalDate.now());
             h.body.addView(Ui.text("Balance updated " + (days == 0 ? "today" : days == 1 ? "yesterday" : days + " days ago"), 12, 400, Theme.text3));
@@ -711,7 +816,11 @@ public class BillsPage extends Page {
         btns2.addView(Ui.tonal("Update balance", "edit", new Runnable() { @Override public void run() {
             h.dismiss();
             Sheets.input(a, "Balance owed", "From your latest statement or banking app.", "e.g. 1250", Ui.num(b.balance), true, new Ui.Fn<String>() {
-                @Override public void on(String v) { b.balance = Math.max(0, Ui.parse(v)); b.balanceMillis = System.currentTimeMillis(); Store.changed(); render(false); cardSheet(b); }
+                @Override public void on(String v) {
+                    Snap was = new Snap(b);
+                    b.balance = Math.max(0, Ui.parse(v)); b.balanceMillis = System.currentTimeMillis(); b.rolledMillis = TaxEngine.toMillis(LocalDate.now());
+                    recalc(b); Store.changed(); render(false); cardSheet(b); a.snack(changes(b, was));
+                }
             });
         } }), Ui.weight(1));
         btns2.addView(Ui.space(10));
@@ -743,7 +852,7 @@ public class BillsPage extends Page {
                 if (g.getChildCount() > 0) g.addView(Ui.divider(16));
                 g.addView(paymentLine(p, false, new Runnable() { @Override public void run() {
                     // undo a recorded payment: add it back to the balance
-                    b.balance += p.amount; b.payments.remove(p); Store.changed(); h.dismiss(); render(false); cardSheet(b);
+                    b.balance += p.amount; b.payments.remove(p); recalc(b); Store.changed(); h.dismiss(); render(false); cardSheet(b);
                     a.snack("Payment removed · balance back to " + Ui.money(b.balance));
                 } }));
             }
@@ -826,6 +935,7 @@ public class BillsPage extends Page {
                 double v = Ui.parse(amt.getText().toString());
                 if (v <= 0) { a.snack("Enter an amount"); return; }
                 Payoff before = payoff(b, b.amount);
+                Snap was = new Snap(b);
                 addPayment(b, v, date[0], note.getText().toString().trim());
                 Store.changed();
                 Ui.confirmHaptic(h.body);
@@ -837,7 +947,7 @@ public class BillsPage extends Page {
                 if (date[0].isAfter(LocalDate.now()))
                     a.snack("Planned " + Ui.money(v) + " on " + date[0].format(DateTimeFormatter.ofPattern("d MMM", Locale.UK)) + gain);
                 else
-                    a.snack("Paid " + Ui.money(v) + " · " + b.name + " balance " + Ui.money(b.balance) + gain);
+                    a.snack("Paid " + Ui.money(v) + " · " + changes(b, was));
             }
         });
         Sheets.show(h);
@@ -992,6 +1102,7 @@ public class BillsPage extends Page {
         c.remindDays = b.remindDays; c.paused = b.paused; c.trial = b.trial; c.notes = b.notes;
         c.balance = b.balance; c.apr = b.apr; c.payInFull = b.payInFull; c.balanceMillis = b.balanceMillis;
         c.creditLimit = b.creditLimit; c.minPayment = b.minPayment;
+        c.minRule = b.minRule; c.minFloor = b.minFloor; c.followMinimum = b.followMinimum; c.autoRoll = b.autoRoll; c.rolledMillis = b.rolledMillis;
         for (Model.CardPayment p : b.payments) {
             Model.CardPayment q = new Model.CardPayment();
             q.id = p.id; q.dateMillis = p.dateMillis; q.amount = p.amount; q.planned = p.planned; q.note = p.note;
@@ -1193,14 +1304,24 @@ public class BillsPage extends Page {
                     Ui.row(g, "credit_card", Theme.red, "Balance owed", null, b.balance > 0 ? Ui.money(b.balance) : "Add", true, new Runnable() {
                         @Override public void run() {
                             Sheets.input(a, "Balance owed", "From your latest statement or banking app.", "e.g. 1250", b.balance > 0 ? Ui.num(b.balance) : "", true, new Ui.Fn<String>() {
-                                @Override public void on(String v) { b.balance = Math.max(0, Ui.parse(v)); b.balanceMillis = System.currentTimeMillis(); draw[0].run(); }
+                                @Override public void on(String v) {
+                                    b.balance = Math.max(0, Ui.parse(v)); b.balanceMillis = System.currentTimeMillis(); b.rolledMillis = TaxEngine.toMillis(LocalDate.now());
+                                    recalc(b);
+                                    if (b.followMinimum || b.payInFull) amount.setText(b.amount > 0 ? Ui.num(b.amount) : "0");
+                                    draw[0].run();
+                                }
                             });
                         }
                     });
                     Ui.row(g, "percent", Theme.orange, "Interest rate (APR)", null, b.apr > 0 ? Ui.num(b.apr) + "%" : "Add", true, new Runnable() {
                         @Override public void run() {
                             Sheets.input(a, "Interest rate (APR %)", "Your purchase or balance APR. Use 0 for an interest-free period.", "e.g. 24.9", b.apr > 0 ? Ui.num(b.apr) : "", true, new Ui.Fn<String>() {
-                                @Override public void on(String v) { b.apr = Math.max(0, Math.min(99, Ui.parse(v))); draw[0].run(); }
+                                @Override public void on(String v) {
+                                    b.apr = Math.max(0, Math.min(99, Ui.parse(v)));
+                                    recalc(b);
+                                    if (b.followMinimum || b.payInFull) amount.setText(b.amount > 0 ? Ui.num(b.amount) : "0");
+                                    draw[0].run();
+                                }
                             });
                         }
                     });
@@ -1212,19 +1333,53 @@ public class BillsPage extends Page {
                             });
                         }
                     });
-                    Ui.row(g, "receipt_long", Theme.indigo, "Minimum payment", "From your statement. Your monthly payment above can be more", b.minPayment > 0 ? Ui.money(b.minPayment) : "Add", true, new Runnable() {
+                    // Minimum payment: typed in, or worked out from the card's rule so it updates with the balance
+                    final Runnable syncAmount = new Runnable() { @Override public void run() {
+                        recalc(b);
+                        if (b.followMinimum || b.payInFull) amount.setText(b.amount > 0 ? Ui.num(b.amount) : "0");
+                    } };
+                    Ui.row(g, "receipt_long", Theme.indigo, "Minimum payment", MIN_RULES[b.minRule],
+                            b.minRule != 0 ? Ui.money(computeMin(b)) : b.minPayment > 0 ? Ui.money(b.minPayment) : "Add", true, new Runnable() {
                         @Override public void run() {
-                            Sheets.input(a, "Minimum payment", "The minimum on your latest statement.", "e.g. 25", b.minPayment > 0 ? Ui.num(b.minPayment) : "", true, new Ui.Fn<String>() {
-                                @Override public void on(String v) {
-                                    b.minPayment = Math.max(0, Ui.parse(v));
-                                    if (b.minPayment > 0 && Ui.parse(amount.getText().toString()) <= 0) amount.setText(Ui.num(b.minPayment));
-                                    draw[0].run();
+                            Sheets.choose(a, "How is the minimum worked out?", MIN_RULES, b.minRule, new Ui.Fn<Integer>() {
+                                @Override public void on(Integer i) {
+                                    b.minRule = i;
+                                    if (i == 0) {
+                                        Sheets.input(a, "Minimum payment", "The minimum on your latest statement.", "e.g. 25", b.minPayment > 0 ? Ui.num(b.minPayment) : "", true, new Ui.Fn<String>() {
+                                            @Override public void on(String v) {
+                                                b.minPayment = Math.max(0, Ui.parse(v));
+                                                if (b.minPayment > 0 && Ui.parse(amount.getText().toString()) <= 0) amount.setText(Ui.num(b.minPayment));
+                                                syncAmount.run(); draw[0].run();
+                                            }
+                                        });
+                                    } else { syncAmount.run(); draw[0].run(); }
                                 }
                             });
                         }
                     });
-                    Ui.switchRow(g, "check", Theme.green, "Pay in full each month", "No interest; the amount varies", b.payInFull, new Ui.Fn<Boolean>() {
-                        @Override public void on(Boolean v) { b.payInFull = v; draw[0].run(); }
+                    if (b.minRule != 0) {
+                        Ui.row(g, "remove", Theme.text2, "Lowest minimum", "Cards charge at least this", Ui.money(b.minFloor, b.minFloor % 1 == 0 ? 0 : 2), true, new Runnable() {
+                            @Override public void run() {
+                                Sheets.input(a, "Lowest minimum", "Most UK cards use £5 or £25. Check your statement.", "e.g. 5", Ui.num(b.minFloor), true, new Ui.Fn<String>() {
+                                    @Override public void on(String v) { b.minFloor = Math.max(0, Ui.parse(v)); syncAmount.run(); draw[0].run(); }
+                                });
+                            }
+                        });
+                    }
+                    int mode = b.payInFull ? 2 : b.followMinimum ? 0 : 1;
+                    Ui.row(g, "payments", Theme.green, "Each month I pay", null, mode == 0 ? "The minimum" : mode == 2 ? "In full" : "A fixed amount", true, new Runnable() {
+                        @Override public void run() {
+                            Sheets.choose(a, "Each month I pay", PAY_MODES, b.payInFull ? 2 : b.followMinimum ? 0 : 1, new Ui.Fn<Integer>() {
+                                @Override public void on(Integer i) {
+                                    b.followMinimum = i == 0; b.payInFull = i == 2;
+                                    if (i == 0 && b.minRule == 0 && b.minPayment <= 0) b.minRule = 1;   // need a minimum to follow
+                                    syncAmount.run(); draw[0].run();
+                                }
+                            });
+                        }
+                    });
+                    Ui.switchRow(g, "autorenew", Theme.accent, "Smart monthly updates", "On each payment date, add interest, take off your payment and recalculate the minimum", b.autoRoll, new Ui.Fn<Boolean>() {
+                        @Override public void on(Boolean v) { b.autoRoll = v; if (v) b.rolledMillis = TaxEngine.toMillis(LocalDate.now()); }
                     });
                     double payNow = Ui.parse(amount.getText().toString());
                     if (b.balance > 0 && !b.payInFull) {
@@ -1292,7 +1447,10 @@ public class BillsPage extends Page {
         Sheets.buttons(h, "Save", new Runnable() {
             @Override public void run() {
                 double amt = Ui.parse(amount.getText().toString());
-                if (amt <= 0) { a.snack("Enter an amount"); return; }
+                if (isCredit(b) && (b.followMinimum || b.payInFull)) {
+                    b.amount = amt; recalc(b); amt = b.amount;   // amount follows the balance
+                    if (b.rolledMillis <= 0) b.rolledMillis = TaxEngine.toMillis(LocalDate.now());
+                } else if (amt <= 0) { a.snack("Enter an amount"); return; }
                 String nm = name.getText().toString().trim();
                 b.name = nm.isEmpty() ? b.category : nm;
                 b.amount = amt;

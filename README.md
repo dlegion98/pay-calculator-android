@@ -39,7 +39,11 @@ and two panes.
   overpayment tip.
   Credit limit and available credit (with utilisation), minimum payment, recording payments at any time, and
   planning one-off extra payments for future dates. Planned payments count towards the payoff estimate and show in
-  upcoming payments, on the calendar and in reminders. Suggestions include UK card issuers, buy-now-pay-later firms and lenders.
+  upcoming payments, on the calendar and in reminders.
+- Smart credit updates. Any payment (or clearing the card) recalculates the interest, the minimum (from the card's
+  rule, e.g. 1% + interest with a floor) and, if you pay the minimum or in full, the next payment. On each payment
+  date the card rolls forward: interest is added, your payment comes off (logged as automatic and undoable) and the
+  minimum is recalculated. Suggestions include UK card issuers, buy-now-pay-later firms and lenders.
 - Payment reminders: one switch for all payments, with lead time (on the day up to a week before) and time of day,
   plus per-payment overrides.
 - Payments show on the calendar as coloured dots, with the day's payments and monthly totals.
