@@ -319,6 +319,7 @@ public final class Store {
         o.put("frequency", b.frequency); o.put("startMillis", b.startMillis);
         o.put("subscription", b.subscription); o.put("remindDays", b.remindDays);
         o.put("paused", b.paused); o.put("trial", b.trial); o.put("notes", b.notes);
+        o.put("balance", b.balance); o.put("apr", b.apr); o.put("payInFull", b.payInFull); o.put("balanceMillis", b.balanceMillis);
         return o;
     }
 
@@ -336,6 +337,10 @@ public final class Store {
         b.paused = o.optBoolean("paused", false);
         b.trial = o.optBoolean("trial", false);
         b.notes = o.optString("notes", "");
+        b.balance = o.optDouble("balance", 0);
+        b.apr = o.optDouble("apr", 0);
+        b.payInFull = o.optBoolean("payInFull", false);
+        b.balanceMillis = o.optLong("balanceMillis", 0);
         return b;
     }
 

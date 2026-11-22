@@ -1003,17 +1003,32 @@ public class MainActivity extends Activity {
         if (lockOverlay == null) {
             LinearLayout l = Ui.v();
             l.setGravity(Gravity.CENTER);
-            l.setBackgroundColor(Theme.bg);
+            l.setBackground(new Glass.Aurora());
             l.setClickable(true);
-            l.addView(Ui.badge("lock", Theme.accent, 88));
-            TextView t = Ui.text("Pay Calculator is locked", 24, 650, Theme.text);
-            t.setPadding(0, Ui.dp(22), 0, Ui.dp(6));
-            l.addView(t);
-            TextView s = Ui.text("Authenticate to view your private financial data.", 15, 400, Theme.text2);
+            l.setPadding(Ui.dp(32), Ui.insetTop + Ui.dp(24), Ui.dp(32), Ui.insetBottom + Ui.dp(24));
+            // App icon tile with a small lock, centred like the iOS / One UI lock screens
+            FrameLayout iconBox = new FrameLayout(this);
+            iconBox.addView(Ui.badge("currency_pound", Theme.accent, 84), new FrameLayout.LayoutParams(Ui.dp(84), Ui.dp(84), Gravity.CENTER));
+            View lockDot = Ui.badge("lock", Theme.dark ? 0xFF3A3A3C : 0xFF1C1C1E, 34);
+            FrameLayout.LayoutParams ld = new FrameLayout.LayoutParams(Ui.dp(34), Ui.dp(34), Gravity.BOTTOM | Gravity.END);
+            iconBox.addView(lockDot, ld);
+            l.addView(iconBox, new LinearLayout.LayoutParams(Ui.dp(100), Ui.dp(100)));
+            TextView t = Ui.text("Pay Calculator is locked", 24, 700, Theme.text);
+            t.setGravity(Gravity.CENTER);
+            t.setPadding(0, Ui.dp(20), 0, Ui.dp(8));
+            l.addView(t, new LinearLayout.LayoutParams(Ui.MATCH, Ui.WRAP));
+            TextView s = Ui.text("Use your fingerprint, face or screen lock to see your pay.", 15, 400, Theme.text2);
             s.setGravity(Gravity.CENTER);
-            s.setPadding(Ui.dp(40), 0, Ui.dp(40), Ui.dp(28));
-            l.addView(s);
-            l.addView(Ui.primary("Unlock", "fingerprint", new Runnable() { @Override public void run() { authenticate(); } }));
+            s.setPadding(0, 0, 0, Ui.dp(28));
+            l.addView(s, new LinearLayout.LayoutParams(Ui.MATCH, Ui.WRAP));
+            final LinearLayout btn = Ui.primary("Unlock", "fingerprint", new Runnable() { @Override public void run() { authenticate(); } });
+            LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(Ui.MATCH, Ui.WRAP);
+            l.addView(btn, bl);
+            btn.post(new Runnable() { @Override public void run() {
+                // keep the button a comfortable width on tablets and unfolded foldables
+                int max = Ui.dp(360);
+                if (btn.getWidth() > max) { LinearLayout.LayoutParams p2 = (LinearLayout.LayoutParams) btn.getLayoutParams(); p2.width = max; btn.setLayoutParams(p2); }
+            } });
             lockOverlay = l;
             root.addView(l, new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
         }

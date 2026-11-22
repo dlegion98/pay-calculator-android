@@ -51,6 +51,49 @@ public class BillsPage extends Page {
         return h + ":00";
     }
 
+    // ------------------------------------------------------------------ credit cards & loans
+
+    public static boolean isCredit(Bill b) { return "Loans & credit".equals(b.category); }
+
+    /** Payoff projection at the current payment: months to clear, total interest, or never. */
+    static final class Payoff {
+        int months; double interest, monthlyInterest; boolean never, cleared;
+    }
+
+    static Payoff payoff(Bill b, double payment) {
+        Payoff p = new Payoff();
+        if (b.balance <= 0) { p.cleared = true; return p; }
+        if (b.payInFull) { p.months = 1; return p; }
+        double r = Math.max(0, b.apr) / 100.0 / 12.0;
+        p.monthlyInterest = b.balance * r;
+        if (payment <= p.monthlyInterest + 0.005) { p.never = true; return p; }
+        double bal = b.balance;
+        while (bal > 0.005 && p.months < 600) {
+            double i = bal * r;
+            p.interest += i;
+            bal = bal + i - Math.min(payment, bal + i);
+            p.months++;
+        }
+        if (p.months >= 600) p.never = true;
+        return p;
+    }
+
+    static String duration(int months) {
+        if (months <= 1) return "1 month";
+        int y = months / 12, m = months % 12;
+        if (y == 0) return months + " months";
+        return y + (y == 1 ? " yr" : " yrs") + (m > 0 ? " " + m + " mo" : "");
+    }
+
+    /** One-line status for a card or loan. */
+    static String creditLine(Bill b, double payment) {
+        if (b.payInFull) return "Paid in full monthly · no interest";
+        if (b.balance <= 0) return "Add the balance to see when it's cleared";
+        Payoff p = payoff(b, payment);
+        if (p.never) return Ui.money(b.balance, 0) + " owed · payment doesn't cover the interest";
+        return Ui.money(b.balance, 0) + " owed · clear in " + duration(p.months) + (p.interest >= 1 ? " · " + Ui.money(p.interest, 0) + " interest" : "");
+    }
+
     public static boolean remindersOn() { return Store.bool("billReminders", false); }
 
     /** Days before the payment to notify, or -1 for no reminder. */
@@ -273,8 +316,9 @@ public class BillsPage extends Page {
     private List<Bill> visible() {
         List<Bill> out = new ArrayList<Bill>();
         for (Bill b : Store.bills) {
-            if ("Subscriptions".equals(filter) && !b.subscription) continue;
-            if ("Bills".equals(filter) && b.subscription) continue;
+            if ("Subscriptions".equals(filter) && (!b.subscription || isCredit(b))) continue;
+            if ("Bills".equals(filter) && (b.subscription || isCredit(b))) continue;
+            if ("Credit".equals(filter) && !isCredit(b)) continue;
             out.add(b);
         }
         final LocalDate t = LocalDate.now();
@@ -419,10 +463,15 @@ public class BillsPage extends Page {
             add(c);
         }
 
+        // Credit cards & loans
+        View cc = creditCard();
+        if (cc != null) add(span(cc));
+
         // All payments
         add(Ui.sectionTitle("All payments"));
-        LinearLayout seg = Ui.segmented(new String[]{"All", "Subscriptions", "Bills"}, Arrays.asList("All", "Subscriptions", "Bills").indexOf(filter), new Ui.Fn<Integer>() {
-            @Override public void on(Integer i) { filter = new String[]{"All", "Subscriptions", "Bills"}[i]; render(false); }
+        final String[] filters = {"All", "Subscriptions", "Bills", "Credit"};
+        LinearLayout seg = Ui.segmented(new String[]{"All", "Subs", "Bills", "Credit"}, Arrays.asList(filters).indexOf(filter), new Ui.Fn<Integer>() {
+            @Override public void on(Integer i) { filter = filters[i]; render(false); }
         });
         seg.setLayoutParams(Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 0, 0, 10));
         add(span(seg));
@@ -443,6 +492,68 @@ public class BillsPage extends Page {
         TextView n = Ui.text("Tap a payment to edit it, long-press to pause, duplicate or delete. Safe to spend = take-home logged this month minus the payments due this month.", 13, 400, Theme.text2);
         n.setPadding(Ui.dp(10), Ui.dp(8), Ui.dp(10), 0);
         add(span(n));
+    }
+
+    /** Total owed, monthly interest and payoff per card/loan, plus an overpayment tip. */
+    private View creditCard() {
+        List<Bill> cards = new ArrayList<Bill>();
+        for (Bill b : Store.bills) if (isCredit(b) && !b.paused && (b.balance > 0 || b.payInFull)) cards.add(b);
+        if (cards.isEmpty()) return null;
+        double owed = 0, pay = 0, interest = 0;
+        Bill worst = null;
+        for (Bill b : cards) {
+            owed += b.balance;
+            pay += monthly(b);
+            if (!b.payInFull) {
+                interest += b.balance * b.apr / 100.0 / 12.0;
+                if (b.balance > 0 && b.apr > 0 && (worst == null || b.apr > worst.apr)) worst = b;
+            }
+        }
+        add(Ui.sectionTitle("Credit cards & loans"));
+        LinearLayout c = Ui.card();
+        LinearLayout top = Ui.h();
+        LinearLayout l1 = Ui.v();
+        l1.addView(Ui.caption("Total owed"));
+        l1.addView(Ui.text(Ui.money(owed, 0), 24, 800, Theme.text));
+        top.addView(l1, Ui.weight(1));
+        LinearLayout l2 = Ui.v();
+        l2.setGravity(Gravity.END);
+        l2.addView(Ui.caption("Interest / month"));
+        l2.addView(Ui.text(Ui.money(interest), 18, 750, interest > 0 ? Theme.red : Theme.green));
+        top.addView(l2);
+        c.addView(top);
+        c.addView(Ui.text("Paying " + Ui.money(pay, 0) + " a month across " + cards.size() + (cards.size() == 1 ? " account" : " accounts"), 13, 500, Theme.text2));
+        for (Bill b : cards) {
+            LinearLayout r = Ui.h();
+            r.setPadding(0, Ui.dp(12), 0, 0);
+            r.addView(Ui.badge("credit_card", color(b.category), 32));
+            r.addView(Ui.space(12));
+            LinearLayout t = Ui.v();
+            t.addView(Ui.single(b.name + (b.apr > 0 && !b.payInFull ? " · " + Ui.num(b.apr) + "% APR" : ""), 15, 600, Theme.text));
+            Payoff p = payoff(b, b.amount);
+            t.addView(Ui.text(creditLine(b, b.amount), 12.5f, 500, p.never ? Theme.red : Theme.text2));
+            r.addView(t, Ui.weight(1));
+            if (b.balance > 0) r.addView(Ui.text(Ui.money(b.balance, 0), 15, 700, Theme.text));
+            final Bill fb = b;
+            Ui.tap(r, 10, new Runnable() { @Override public void run() { edit(fb); } });
+            c.addView(r);
+        }
+        if (worst != null) {
+            Payoff now = payoff(worst, worst.amount), more = payoff(worst, worst.amount + 50);
+            if (!more.never && (now.never || now.months - more.months >= 1)) {
+                TextView tip = Ui.text(now.never
+                        ? "Tip: " + worst.name + " needs more than " + Ui.money(now.monthlyInterest) + " a month just to cover interest. At " + Ui.money(worst.amount + 50, 0) + " it's clear in " + duration(more.months) + "."
+                        : "Tip: paying " + Ui.money(50, 0) + " more on " + worst.name + " (your highest rate) clears it " + duration(now.months - more.months) + " sooner and saves about " + Ui.money(now.interest - more.interest, 0) + " in interest.",
+                        13, 500, Theme.text);
+                tip.setBackground(Ui.rr(Theme.withAlpha(Theme.green, 0.12f), 10));
+                tip.setPadding(Ui.dp(12), Ui.dp(10), Ui.dp(12), Ui.dp(10));
+                c.addView(tip, Ui.lpm(Ui.MATCH, Ui.WRAP, 0, 14, 0, 0));
+            }
+        }
+        TextView n = Ui.text("Estimates use your balance, APR and monthly payment. Update the balance from your latest statement.", 12, 400, Theme.text2);
+        n.setPadding(0, Ui.dp(10), 0, 0);
+        c.addView(n);
+        return c;
     }
 
     private View heroStat(String value, String label, int on) {
@@ -511,7 +622,7 @@ public class BillsPage extends Page {
         LinearLayout r = Ui.h();
         r.setPadding(Ui.dp(16), Ui.dp(10), Ui.dp(14), Ui.dp(10));
         r.setMinimumHeight(Ui.dp(60));
-        r.addView(Ui.badge(icon(b.category), b.paused ? Theme.text3 : color(b.category), 40));
+        r.addView(Ui.badge(isCredit(b) ? "credit_card" : icon(b.category), b.paused ? Theme.text3 : color(b.category), 40));
         r.addView(Ui.space(14));
         LinearLayout t = Ui.v();
         LinearLayout nameRow = Ui.h();
@@ -522,6 +633,7 @@ public class BillsPage extends Page {
         t.addView(nameRow);
         String w = when(nextDue(b, LocalDate.now()));
         String sub = b.paused ? b.category + " · " + b.frequency
+                : isCredit(b) && (b.balance > 0 || b.payInFull) ? (w.matches("Today|Tomorrow|In .*") ? w : "Next " + w) + " · " + creditLine(b, b.amount)
                 : (w.matches("Today|Tomorrow|In .*") ? w : "Next " + w) + " · " + b.category;
         t.addView(Ui.single(sub, 13, 400, Theme.text2));
         r.addView(t, Ui.weight(1));
@@ -612,8 +724,17 @@ public class BillsPage extends Page {
         final Runnable drawKind = new Runnable() {
             @Override public void run() {
                 kindBox.removeAllViews();
-                kindBox.addView(Ui.segmented(new String[]{"Subscription", "Bill"}, b.subscription ? 0 : 1, new Ui.Fn<Integer>() {
-                    @Override public void on(Integer i) { b.subscription = i == 0; }
+                int sel = isCredit(b) ? 2 : b.subscription ? 0 : 1;
+                kindBox.addView(Ui.segmented(new String[]{"Subscription", "Bill", "Credit card"}, sel, new Ui.Fn<Integer>() {
+                    @Override public void on(Integer i) {
+                        boolean wasCredit = isCredit(b);
+                        if (i == 2) { b.subscription = false; b.category = "Loans & credit"; }
+                        else {
+                            b.subscription = i == 0;
+                            if (wasCredit) b.category = i == 0 ? "Subscriptions" : "Bills";
+                        }
+                        if (wasCredit != (i == 2)) draw[0].run();
+                    }
                 }));
             }
         };
@@ -675,6 +796,12 @@ public class BillsPage extends Page {
                 plansBox.setVisibility(View.VISIBLE);
             }
         };
+        // Live payoff estimate while typing the monthly payment for a card or loan
+        amount.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence x, int st, int c, int af) {}
+            @Override public void onTextChanged(CharSequence x, int st, int bf, int c) {}
+            @Override public void afterTextChanged(android.text.Editable x) { if (isCredit(b) && b.balance > 0 && draw[0] != null) draw[0].run(); }
+        });
         name.addTextChangedListener(new android.text.TextWatcher() {
             @Override public void beforeTextChanged(CharSequence x, int st, int c, int af) {}
             @Override public void onTextChanged(CharSequence x, int st, int bf, int c) {}
@@ -750,6 +877,31 @@ public class BillsPage extends Page {
         draw[0] = new Runnable() {
             @Override public void run() {
                 g.removeAllViews();
+                if (isCredit(b)) {
+                    Ui.row(g, "credit_card", Theme.red, "Balance owed", null, b.balance > 0 ? Ui.money(b.balance) : "Add", true, new Runnable() {
+                        @Override public void run() {
+                            Sheets.input(a, "Balance owed", "From your latest statement or banking app.", "e.g. 1250", b.balance > 0 ? Ui.num(b.balance) : "", true, new Ui.Fn<String>() {
+                                @Override public void on(String v) { b.balance = Math.max(0, Ui.parse(v)); b.balanceMillis = System.currentTimeMillis(); draw[0].run(); }
+                            });
+                        }
+                    });
+                    Ui.row(g, "percent", Theme.orange, "Interest rate (APR)", null, b.apr > 0 ? Ui.num(b.apr) + "%" : "Add", true, new Runnable() {
+                        @Override public void run() {
+                            Sheets.input(a, "Interest rate (APR %)", "Your purchase or balance APR. Use 0 for an interest-free period.", "e.g. 24.9", b.apr > 0 ? Ui.num(b.apr) : "", true, new Ui.Fn<String>() {
+                                @Override public void on(String v) { b.apr = Math.max(0, Math.min(99, Ui.parse(v))); draw[0].run(); }
+                            });
+                        }
+                    });
+                    Ui.switchRow(g, "check", Theme.green, "Pay in full each month", "No interest; the amount varies", b.payInFull, new Ui.Fn<Boolean>() {
+                        @Override public void on(Boolean v) { b.payInFull = v; draw[0].run(); }
+                    });
+                    double payNow = Ui.parse(amount.getText().toString());
+                    if (b.balance > 0 && !b.payInFull) {
+                        Payoff p = payoff(b, payNow);
+                        String v = payNow <= 0 ? "Add your monthly payment" : p.never ? "Never at this payment" : duration(p.months);
+                        Ui.row(g, "flag", p.never ? Theme.red : Theme.teal, "Cleared in", payNow > 0 && !p.never ? Ui.money(p.interest, 0) + " interest in total" : null, v, false, null);
+                    }
+                }
                 Ui.row(g, "autorenew", Theme.blue, "Repeats", null, b.frequency, true, new Runnable() {
                     @Override public void run() {
                         Sheets.choose(a, "Repeats", FREQS, Arrays.asList(FREQS).indexOf(b.frequency), new Ui.Fn<Integer>() {
@@ -766,7 +918,7 @@ public class BillsPage extends Page {
                 Ui.row(g, icon(b.category), color(b.category), "Category", null, b.category, true, new Runnable() {
                     @Override public void run() {
                         Sheets.choose(a, "Category", CATS, Arrays.asList(CATS).indexOf(b.category), new Ui.Fn<Integer>() {
-                            @Override public void on(Integer i) { b.category = CATS[i]; draw[0].run(); }
+                            @Override public void on(Integer i) { b.category = CATS[i]; if (isCredit(b)) b.subscription = false; draw[0].run(); drawKind.run(); }
                         });
                     }
                 });

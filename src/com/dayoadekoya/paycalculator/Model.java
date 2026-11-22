@@ -121,5 +121,10 @@ public final class Model {
         public boolean paused;
         public boolean trial;                  // free trial: first charge on startMillis
         public String notes = "";
+        // Credit cards & loans
+        public double balance;                 // amount owed
+        public double apr;                     // annual interest rate, %
+        public boolean payInFull;              // card cleared in full each month (no interest)
+        public long balanceMillis;             // when the balance was last updated
     }
 }
